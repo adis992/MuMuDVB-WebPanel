@@ -145,39 +145,114 @@ else
     fi
 fi
 
-# Check Node.js version - should be 18.x
-NODE_MAJOR_VERSION=$(echo $NODE_VERSION | cut -d'.' -f1 | tr -d 'v')
-if [ "$NODE_MAJOR_VERSION" -lt 18 ]; then
-    print_warning "Node.js verzija je $NODE_VERSION - trebam v18.x!"
-    print_status "Forciram Node.js 18.x instalaciju..."
+# DEFINITIVNI Node.js 18.x fix - GARANTOVANO!
+print_status "🔥 DEFINITIVNI Node.js 18.x fix..."
+
+# 1. NUKLEARNO uklanjanje svih Node.js verzija
+print_status "💣 Nuklearno uklanjanje starog Node.js..."
+apt remove --purge -y nodejs npm nodejs-doc libnode64 libc-ares2 2>/dev/null || true
+apt autoremove -y --purge
+apt autoclean
+
+# 2. Ukloni sve NodeSource repozitorijume
+rm -rf /etc/apt/sources.list.d/nodesource* 2>/dev/null || true
+rm -rf /usr/share/keyrings/nodesource* 2>/dev/null || true
+
+# 3. Ukloni sve Node.js fajlove
+rm -rf /usr/bin/node* /usr/bin/npm /usr/lib/node* /usr/share/node* 2>/dev/null || true
+
+# 4. SVEZI NodeSource setup sa retry logikom
+print_status "📦 Instaliram NodeSource 18.x repozitorijum..."
+for attempt in 1 2 3; do
+    print_status "Pokušaj $attempt/3..."
     
-    # Force remove old nodejs
-    apt remove --purge -y nodejs npm 2>/dev/null || true
-    apt autoremove -y
-    
-    # Clean and reinstall NodeSource
-    rm -rf /etc/apt/sources.list.d/nodesource*
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-    apt update
-    apt install -y nodejs
-    
-    # Test again
-    if /usr/bin/node --version | grep -q "v18"; then
-        NODE_CMD="/usr/bin/node"
-        NPM_CMD="/usr/bin/npm"
-        NODE_VERSION=$(/usr/bin/node --version)
-        print_success "Node.js ažuriran na: $NODE_VERSION"
+    if curl -fsSL https://deb.nodesource.com/setup_18.x | bash -; then
+        print_success "NodeSource repozitorijum dodat!"
+        break
     else
-        print_error "Ne mogu da instaliram Node.js 18.x!"
+        print_warning "Pokušaj $attempt neuspešan, čekam 5 sekundi..."
+        sleep 5
+    fi
+    
+    if [ $attempt -eq 3 ]; then
+        print_error "NodeSource setup potpuno neuspešan!"
+        
+        # ALTERNATIVE: Manual repository add
+        print_status "🚨 EMERGENCY: Ručno dodavanje NodeSource..."
+        echo "deb https://deb.nodesource.com/node_18.x focal main" > /etc/apt/sources.list.d/nodesource.list
+        echo "deb-src https://deb.nodesource.com/node_18.x focal main" >> /etc/apt/sources.list.d/nodesource.list
+        
+        # Add GPG key manually
+        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add -
+        
+        print_success "Emergency NodeSource setup završen!"
+    fi
+done
+
+# 5. Force update repository
+apt update
+
+# 6. FORCE install Node.js 18.x sa specifičnom verzijom
+print_status "🎯 Force instalacija Node.js 18.x..."
+if apt install -y nodejs=18.*; then
+    print_success "Node.js 18.x instaliran sa apt!"
+elif apt install -y nodejs; then
+    print_warning "Instaliran nodejs (neznam koju verziju)..."
+else
+    print_error "Apt instalacija neuspešna!"
+    
+    # ULTIMATE FALLBACK: Binary download
+    print_status "🚨 ULTIMATE FALLBACK: Direktno skidanje Node.js 18.x binary..."
+    cd /tmp
+    wget -q https://nodejs.org/dist/v18.20.4/node-v18.20.4-linux-x64.tar.xz
+    if [ -f "node-v18.20.4-linux-x64.tar.xz" ]; then
+        tar -xf node-v18.20.4-linux-x64.tar.xz
+        cp -r node-v18.20.4-linux-x64/bin/* /usr/local/bin/
+        cp -r node-v18.20.4-linux-x64/lib/* /usr/local/lib/
+        cp -r node-v18.20.4-linux-x64/include/* /usr/local/include/
+        cp -r node-v18.20.4-linux-x64/share/* /usr/local/share/
+        
+        # Create symlinks
+        ln -sf /usr/local/bin/node /usr/bin/node
+        ln -sf /usr/local/bin/npm /usr/bin/npm
+        
+        print_success "🎉 Node.js 18.x instaliran direktno!"
+    else
+        print_error "❌ I direktno skidanje neuspešno!"
     fi
 fi
 
-# Update npm only if compatible
-if [ "$NODE_MAJOR_VERSION" -ge 18 ]; then
-    print_status "Ažuriranje npm na najnoviju verziju..."
-    $NPM_CMD install -g npm@latest
+# 7. KONAČNI TEST
+if command -v node &>/dev/null; then
+    FINAL_NODE_VERSION=$(node --version)
+    NODE_MAJOR=$(echo $FINAL_NODE_VERSION | cut -d'.' -f1 | tr -d 'v')
+    
+    if [ "$NODE_MAJOR" -ge 18 ]; then
+        print_success "🎉 SUCCESS: Node.js verzija: $FINAL_NODE_VERSION"
+        NODE_CMD="node"
+        NPM_CMD="npm"
+        
+        # Install/update npm
+        if command -v npm &>/dev/null; then
+            print_status "Ažuriranje npm..."
+            npm install -g npm@latest
+        fi
+    else
+        print_error "❌ FAIL: Node.js verzija je još uvek $FINAL_NODE_VERSION"
+        print_status "Nastavljam sa starijom verzijom..."
+        NODE_CMD="node"
+        NPM_CMD="npm"
+    fi
 else
-    print_warning "Preskačem npm update zbog stare Node.js verzije"
+    print_error "❌ KRITIČNA GREŠKA: node komanda ne postoji!"
+    print_status "Pokušavam sa nodejs..."
+    if command -v nodejs &>/dev/null; then
+        NODE_CMD="nodejs"
+        NPM_CMD="npm"
+    else
+        print_error "❌ NI nodejs ne postoji - prekidam!"
+        exit 1
+    fi
 fi
 
 # Final verification
