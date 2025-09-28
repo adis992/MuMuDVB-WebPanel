@@ -64,9 +64,21 @@ print_success "MuMuDVB instaliran: $(which mumudvb)"
 # OSCAM KOMPAJLIRANJE
 print_status "OSCam kompajliranje..."
 cd /tmp
-rm -rf oscam-smod 2>/dev/null || true
-git clone https://github.com/Schimmelreiter/oscam-smod.git
-cd oscam-smod
+rm -rf oscam* 2>/dev/null || true
+
+# Pokušaj glavni repo
+if git clone https://github.com/Schimmelreiter/oscam-smod.git 2>/dev/null; then
+    cd oscam-smod
+    print_success "OSCam smod repo kloniran"
+elif git clone https://github.com/oscam-emu/oscam-patched.git oscam-smod 2>/dev/null; then
+    cd oscam-smod
+    print_success "OSCam patched repo kloniran"
+elif git clone https://github.com/fairbird/oscam.git oscam-smod 2>/dev/null; then
+    cd oscam-smod
+    print_success "OSCam fairbird repo kloniran"
+else
+    print_error "Svi OSCam repozitorijumi nedostupni!"
+fi
 mkdir -p build && cd build
 cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DWEBIF=ON -DWITH_SSL=ON ..
 make -j$(nproc)
