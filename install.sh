@@ -566,14 +566,14 @@ const WebSocket = require('ws');
 const fs = require('fs');
 
 const app = express();
-const port = 8080;
+const port = 8887;
 
 // Middleware
 app.use(express.static('public'));
 app.use(express.json());
 
 // WebSocket
-const wss = new WebSocket.Server({ port: 8082 });
+const wss = new WebSocket.Server({ port: 8886 });
 
 function broadcast(data) {
     wss.clients.forEach(client => {
@@ -793,7 +793,7 @@ autoconf_unicast_start_port=8100
 autoconf_multicast_port=1234
 
 # Web interface
-common_port=8080
+common_port=8887
 
 # CAM support
 cam_support=1
@@ -891,8 +891,8 @@ echo "   ✅ Web Panel: $WEB_DIR"
 echo "   ✅ Systemd servis: mumudvb-webpanel"
 echo ""
 echo "🌐 WEB PANEL PRISTUP:"
-echo "   Lokalno:  http://localhost:8080"
-echo "   Mreža:    http://$(hostname -I | awk '{print $1}' 2>/dev/null || echo 'SERVER_IP'):8080"
+echo "   Lokalno:  http://localhost:8887"
+echo "   Mreža:    http://$(hostname -I | awk '{print $1}' 2>/dev/null || echo 'SERVER_IP'):8887"
 echo ""
 echo "🔧 KOMANDE:"
 echo "   Servis status:  systemctl status mumudvb-webpanel"
