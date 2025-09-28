@@ -112,13 +112,22 @@ if [[ "$UBUNTU_VERSION" == "20.04" ]]; then
 else
     # For Ubuntu 22.04 and newer
     print_status "Installing DVB packages for Ubuntu $UBUNTU_VERSION..."
-    sudo apt install -y \
-        dvb-apps \
-        dvb-tools \
-        w-scan \
-        libdvbv5-dev \
-        szap-utils \
-        libdvbv5-tools || print_warning "Some DVB packages not available"
+    
+    # Install packages that actually exist
+    NEWER_PACKAGES=""
+    for pkg in "dvb-apps" "dvb-tools" "w-scan" "libdvbv5-dev"; do
+        if apt-cache show "$pkg" &>/dev/null; then
+            NEWER_PACKAGES="$NEWER_PACKAGES $pkg"
+        fi
+    done
+    
+    if [ -n "$NEWER_PACKAGES" ]; then
+        sudo apt install -y $NEWER_PACKAGES || print_warning "Some DVB packages failed"
+    fi
+    
+    # Try optional packages separately (they may not exist in all versions)
+    sudo apt install -y szap-utils 2>/dev/null || print_warning "szap-utils not available"
+    sudo apt install -y libdvbv5-tools 2>/dev/null || print_warning "libdvbv5-tools not available"
 fi
 
 # Verify what tools we have available
