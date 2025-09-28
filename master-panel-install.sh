@@ -62,55 +62,41 @@ print_success "Node.js instaliran: $(node --version)"
 print_status "DVB paketi..."
 apt install -y dvb-tools w-scan libdvbv5-dev 2>/dev/null || true
 
-# MUMUDVB KOMPAJLIRANJE
-print_status "MuMuDVB kompajliranje..."
-cd /tmp
-rm -rf MuMuDVB 2>/dev/null || true
-git clone https://github.com/braice/MuMuDVB.git
-cd MuMuDVB
-autoreconf -i -f
-./configure --enable-cam-support --enable-scam-support
-make -j$(nproc)
-make install
+# MUMUDVB KOMPAJLIRANJE IZ LOKALNOG FOLDERA
+print_status "MuMuDVB kompajliranje iz projekta..."
+cd /opt/mumudvb-webpanel
+if [ -d "MuMuDVB" ]; then
+    cd MuMuDVB
+    make clean 2>/dev/null || true
+    autoreconf -i -f
+    ./configure --enable-cam-support --enable-scam-support
+    make -j$(nproc)
+    make install
+    print_success "MuMuDVB instaliran iz lokalnog foldera: $(which mumudvb)"
+else
+    print_error "MuMuDVB folder ne postoji u projektu!"
+fi
 
-print_success "MuMuDVB instaliran: $(which mumudvb)"
-
-# OSCAM KOMPAJLIRANJE - SCHIMMELREITER SMOD
-print_status "OSCam Schimmelreiter smod kompajliranje..."
-cd /tmp
-rm -rf oscam-smod 2>/dev/null || true
-
-# Pokušaj više repo-a za OSCam
-OSCAM_REPOS=(
-    "https://github.com/Schimmelreiter/oscam-smod.git"
-    "https://github.com/oscam-emu/oscam-patched.git" 
-    "https://github.com/fairbird/oscam-smod.git"
-)
-
-OSCAM_COMPILED=false
-for repo in "${OSCAM_REPOS[@]}"; do
-    print_status "Pokušavam OSCam repo: $repo"
-    if git clone "$repo" oscam-smod 2>/dev/null; then
-        cd oscam-smod
-        if make allyesconfig CONF_DIR=/var/etc/oscam 2>/dev/null && make -j$(nproc) USE_LIBUSB=1 USE_LIBCRYPTO=1 USE_SSL=1 2>/dev/null; then
-            # Kopiraj u distribution folder kao što si rekao
-            mkdir -p distribution
-            cp oscam distribution/oscam
-            # Move u /usr/local/bin kao što radiš
-            cp distribution/oscam /usr/local/bin/oscam
-            chmod +x /usr/local/bin/oscam
-            OSCAM_COMPILED=true
-            print_success "OSCam kompajliran iz: $repo"
-            break
-        fi
-        cd /tmp
-        rm -rf oscam-smod 2>/dev/null || true
-    fi
-done
-
-if [ "$OSCAM_COMPILED" = false ]; then
-    print_warning "OSCam repo problemi - koristim osnovni..."
-    apt install -y oscam 2>/dev/null || print_warning "OSCam skip - repo problemi"
+# OSCAM KOMPAJLIRANJE IZ LOKALNOG FOLDERA - SCHIMMELREITER SMOD
+print_status "OSCam Schimmelreiter smod kompajliranje iz projekta..."
+cd /opt/mumudvb-webpanel
+if [ -d "oscam" ]; then
+    cd oscam
+    make clean 2>/dev/null || true
+    make allyesconfig CONF_DIR=/var/etc/oscam
+    make -j$(nproc) USE_LIBUSB=1 USE_LIBCRYPTO=1 USE_SSL=1
+    
+    # Kopiraj u distribution folder kao što si rekao
+    mkdir -p distribution
+    cp oscam distribution/oscam
+    # Move u /usr/local/bin kao što radiš  
+    cp distribution/oscam /usr/local/bin/oscam
+    chmod +x /usr/local/bin/oscam
+    
+    print_success "OSCam Schimmelreiter smod kompajliran iz lokalnog foldera!"
+else
+    print_warning "OSCam folder ne postoji - skip kompajliranje"
+    apt install -y oscam 2>/dev/null || print_warning "OSCam skip - repo problemi" 
 fi
 
 # KREIRANJE DIREKTORIJUMA SA PERMISIJAMA
@@ -321,9 +307,15 @@ EOF
 
 print_success "W-Scan config kreiran"
 
-# WEB PANEL
+# WEB PANEL - COPY IZ PROJEKTA
 print_status "Master Web Panel kreiranje..."
 cd /opt/mumudvb-webpanel
+
+# Copy web_panel folder ako postoji
+if [ -d "web_panel" ]; then
+    cp -r web_panel/* . 2>/dev/null || true
+    print_success "Web panel fajlovi kopirani iz projekta"
+fi
 
 # PACKAGE.JSON - sa security fix
 cat > package.json << 'EOF'
