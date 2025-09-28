@@ -45,6 +45,9 @@ apt install -y \
     libtool \
     pkg-config \
     gettext \
+    gettext-base \
+    autopoint \
+    intltool \
     linux-headers-$(uname -r) \
     ca-certificates \
     gnupg \
@@ -142,9 +145,40 @@ else
     fi
 fi
 
-# Update npm to latest
-print_status "Ažuriranje npm na najnoviju verziju..."
-$NPM_CMD install -g npm@latest
+# Check Node.js version - should be 18.x
+NODE_MAJOR_VERSION=$(echo $NODE_VERSION | cut -d'.' -f1 | tr -d 'v')
+if [ "$NODE_MAJOR_VERSION" -lt 18 ]; then
+    print_warning "Node.js verzija je $NODE_VERSION - trebam v18.x!"
+    print_status "Forciram Node.js 18.x instalaciju..."
+    
+    # Force remove old nodejs
+    apt remove --purge -y nodejs npm 2>/dev/null || true
+    apt autoremove -y
+    
+    # Clean and reinstall NodeSource
+    rm -rf /etc/apt/sources.list.d/nodesource*
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    apt update
+    apt install -y nodejs
+    
+    # Test again
+    if /usr/bin/node --version | grep -q "v18"; then
+        NODE_CMD="/usr/bin/node"
+        NPM_CMD="/usr/bin/npm"
+        NODE_VERSION=$(/usr/bin/node --version)
+        print_success "Node.js ažuriran na: $NODE_VERSION"
+    else
+        print_error "Ne mogu da instaliram Node.js 18.x!"
+    fi
+fi
+
+# Update npm only if compatible
+if [ "$NODE_MAJOR_VERSION" -ge 18 ]; then
+    print_status "Ažuriranje npm na najnoviju verziju..."
+    $NPM_CMD install -g npm@latest
+else
+    print_warning "Preskačem npm update zbog stare Node.js verzije"
+fi
 
 # Final verification
 print_status "Finalna provera Node.js i npm..."
@@ -212,17 +246,44 @@ print_success "MuMuDVB source kod skinut"
 if [ ! -f "./configure" ]; then
     print_status "Generiram configure script..."
     
+    # Proverava da li je autopoint dostupan
+    if ! command -v autopoint &>/dev/null; then
+        print_warning "autopoint nije dostupan, instaliram gettext pakete..."
+        apt update
+        apt install -y gettext gettext-base autopoint intltool
+    fi
+    
     if [ -f "./autogen.sh" ]; then
         print_status "Pokrećem autogen.sh..."
         chmod +x autogen.sh
-        ./autogen.sh
+        if ! ./autogen.sh; then
+            print_warning "autogen.sh failed, pokušavam autoreconf..."
+            autoreconf -fiv || {
+                print_warning "autoreconf failed, pokušavam bez gettext..."
+                # Pokušaj bez gettext podrške
+                autoreconf -fiv --force || {
+                    print_error "Ne mogu da generiram configure script!"
+                }
+            }
+        fi
     else
         print_status "Pokrećem autoreconf..."
-        autoreconf -fiv
+        if ! autoreconf -fiv; then
+            print_warning "autoreconf failed, pokušavam bez gettext..."
+            # Alternative: create minimal configure script
+            print_status "Kreiram minimalnu configure skriptu..."
+            if [ -f "configure.ac" ] || [ -f "configure.in" ]; then
+                autoconf || {
+                    print_error "Ne mogu da generiram configure script ni sa autoconf!"
+                }
+            else
+                print_error "Nema configure.ac ili configure.in fajla!"
+            fi
+        fi
     fi
     
     if [ ! -f "./configure" ]; then
-        print_error "Configure script generation failed!"
+        print_error "Configure script generation potpuno neuspešan!"
     fi
     
     print_success "Configure script kreiran"
