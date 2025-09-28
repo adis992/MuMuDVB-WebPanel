@@ -614,6 +614,53 @@ app.post('/api/stop', (req, res) => {
     });
 });
 
+// Config management
+app.get('/api/config', (req, res) => {
+    const fs = require('fs');
+    try {
+        const config = fs.readFileSync('/etc/mumudvb/mumudvb.conf', 'utf8');
+        res.json({ success: true, config: config });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+app.post('/api/config', (req, res) => {
+    const fs = require('fs');
+    try {
+        fs.writeFileSync('/etc/mumudvb/mumudvb.conf', req.body.config);
+        res.json({ success: true, message: 'Config saved successfully' });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+// System info
+app.get('/api/system', (req, res) => {
+    exec('ls -la /dev/dvb/', (error, stdout) => {
+        const dvb_devices = error ? 'No DVB devices found' : stdout;
+        exec('df -h /', (err, disk) => {
+            exec('free -h', (err2, memory) => {
+                res.json({
+                    dvb_devices: dvb_devices,
+                    disk: disk || 'N/A',
+                    memory: memory || 'N/A'
+                });
+            });
+        });
+    });
+});
+
+// Logs
+app.get('/api/logs', (req, res) => {
+    exec('journalctl -u mumudvb-webpanel -n 100 --no-pager', (error, stdout) => {
+        res.json({
+            success: !error,
+            logs: stdout || 'No logs available'
+        });
+    });
+});
+
 app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 MuMuDVB Web Panel na portu ${port}`);
     console.log(`🌐 Pristup: http://localhost:${port}`);
@@ -628,7 +675,7 @@ cat > public/index.html << 'EOF'
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MuMuDVB Web Panel</title>
+    <title>🚀 MuMuDVB Web Panel - FULL ADMIN</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
@@ -636,45 +683,85 @@ cat > public/index.html << 'EOF'
             font-family: Arial, sans-serif; 
             margin: 0; 
             padding: 20px; 
-            background: #f5f5f5; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            min-height: 100vh;
         }
         .container { 
-            max-width: 800px; 
+            max-width: 1200px; 
             margin: 0 auto; 
             background: white; 
             padding: 30px; 
-            border-radius: 10px; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
         .header { 
             text-align: center; 
             margin-bottom: 30px; 
             color: #333;
         }
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #eee;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: #f8f9fa;
+            margin-right: 5px;
+            border-radius: 5px 5px 0 0;
+        }
+        .tab.active {
+            background: #007bff;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
         .status { 
             padding: 15px; 
             margin: 20px 0; 
-            border-radius: 5px; 
+            border-radius: 8px; 
             font-weight: bold;
+            text-align: center;
         }
-        .running { background: #d4edda; color: #155724; }
-        .stopped { background: #f8d7da; color: #721c24; }
+        .running { background: #d4edda; color: #155724; border-left: 5px solid #28a745; }
+        .stopped { background: #f8d7da; color: #721c24; border-left: 5px solid #dc3545; }
         .btn { 
             padding: 12px 24px; 
             margin: 5px; 
             border: none; 
-            border-radius: 5px; 
+            border-radius: 8px; 
             cursor: pointer; 
             font-size: 16px;
+            transition: all 0.3s;
         }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
         .btn-success { background: #28a745; color: white; }
         .btn-danger { background: #dc3545; color: white; }
         .btn-info { background: #17a2b8; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .config-editor {
+            width: 100%;
+            height: 400px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+        }
         .output { 
-            background: #f8f9fa; 
+            background: #2d3748; 
+            color: #e2e8f0;
             padding: 15px; 
-            border-radius: 5px; 
-            font-family: monospace; 
+            border-radius: 8px; 
+            font-family: 'Courier New', monospace;
+            max-height: 300px;
+            overflow-y: auto; 
             margin-top: 20px;
             white-space: pre-wrap;
             max-height: 300px;
@@ -756,9 +843,291 @@ cat > public/index.html << 'EOF'
                 .catch(err => addOutput('Stop error: ' + err));
         }
 
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 5px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 MuMuDVB Web Panel - FULL ADMIN</h1>
+            <p>Ubuntu 20.04 - DVB-S/S2 Streaming Server</p>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('status')">📊 Status</button>
+            <button class="tab" onclick="showTab('config')">⚙️ Configuration</button>
+            <button class="tab" onclick="showTab('settings')">🛠️ Settings</button>
+            <button class="tab" onclick="showTab('system')">💻 System</button>
+            <button class="tab" onclick="showTab('logs')">📋 Logs</button>
+        </div>
+
+        <!-- Status Tab -->
+        <div id="status" class="tab-content active">
+            <div id="statusDiv" class="status">Checking...</div>
+            <div style="text-align: center;">
+                <button class="btn btn-success" onclick="startMuMuDVB()">▶️ Start MuMuDVB</button>
+                <button class="btn btn-danger" onclick="stopMuMuDVB()">⏹️ Stop MuMuDVB</button>
+                <button class="btn btn-info" onclick="checkStatus()">🔄 Refresh Status</button>
+            </div>
+            <div id="output" class="output" style="display:none;"></div>
+        </div>
+
+        <!-- Config Tab -->
+        <div id="config" class="tab-content">
+            <h3>📝 MuMuDVB Configuration Editor</h3>
+            <p>Edit your MuMuDVB configuration directly:</p>
+            <textarea id="configEditor" class="config-editor" placeholder="Loading configuration..."></textarea>
+            <div style="text-align: center; margin-top: 15px;">
+                <button class="btn btn-warning" onclick="loadConfig()">🔄 Reload Config</button>
+                <button class="btn btn-success" onclick="saveConfig()">💾 Save Config</button>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content">
+            <h3>🛠️ Quick Settings</h3>
+            <div class="form-group">
+                <label>Satellite Frequency (kHz):</label>
+                <input type="number" id="freq" placeholder="11538000" value="11538000">
+            </div>
+            <div class="form-group">
+                <label>Polarization:</label>
+                <select id="pol">
+                    <option value="h">Horizontal (H)</option>
+                    <option value="v">Vertical (V)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Symbol Rate (Hz):</label>
+                <input type="number" id="srate" placeholder="22000000" value="22000000">
+            </div>
+            <div class="form-group">
+                <label>DVB Card:</label>
+                <input type="number" id="card" placeholder="0" value="0">
+            </div>
+            <div style="text-align: center;">
+                <button class="btn btn-success" onclick="applyQuickSettings()">✅ Apply Settings</button>
+            </div>
+        </div>
+
+        <!-- System Tab -->
+        <div id="system" class="tab-content">
+            <h3>💻 System Information</h3>
+            <div class="grid">
+                <div class="card">
+                    <h4>📡 DVB Devices</h4>
+                    <pre id="dvbDevices">Loading...</pre>
+                </div>
+                <div class="card">
+                    <h4>💾 Disk Usage</h4>
+                    <pre id="diskUsage">Loading...</pre>
+                </div>
+                <div class="card">
+                    <h4>🧠 Memory Usage</h4>
+                    <pre id="memoryUsage">Loading...</pre>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 20px;">
+                <button class="btn btn-info" onclick="loadSystemInfo()">🔄 Refresh System Info</button>
+            </div>
+        </div>
+
+        <!-- Logs Tab -->
+        <div id="logs" class="tab-content">
+            <h3>📋 System Logs</h3>
+            <div style="text-align: center; margin-bottom: 15px;">
+                <button class="btn btn-info" onclick="loadLogs()">🔄 Refresh Logs</button>
+            </div>
+            <pre id="systemLogs" class="output">Loading logs...</pre>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+
+        function showTab(tabName) {
+            // Hide all tabs
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            const tabButtons = document.querySelectorAll('.tab');
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Load content for specific tabs
+            if (tabName === 'config') loadConfig();
+            if (tabName === 'system') loadSystemInfo();
+            if (tabName === 'logs') loadLogs();
+        }
+
+        function checkStatus() {
+            fetch('/api/status')
+                .then(r => r.json())
+                .then(data => {
+                    const statusDiv = document.getElementById('statusDiv');
+                    if (data.running) {
+                        statusDiv.textContent = `📡 MuMuDVB Status: Running (PID: ${data.pid})`;
+                        statusDiv.className = 'status running';
+                    } else {
+                        statusDiv.textContent = '⭕ MuMuDVB Status: Stopped';
+                        statusDiv.className = 'status stopped';
+                    }
+                });
+        }
+
+        function startMuMuDVB() {
+            document.getElementById('output').textContent = 'Starting MuMuDVB...';
+            document.getElementById('output').style.display = 'block';
+            
+            fetch('/api/start', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('output').textContent = 
+                        `Start ${data.success ? 'successful' : 'failed'}: ${data.message}\\n${data.output || ''}`;
+                    setTimeout(checkStatus, 2000);
+                });
+        }
+
+        function stopMuMuDVB() {
+            document.getElementById('output').textContent = 'Stopping MuMuDVB...';
+            document.getElementById('output').style.display = 'block';
+            
+            fetch('/api/stop', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('output').textContent = data.message;
+                    setTimeout(checkStatus, 2000);
+                });
+        }
+
+        function loadConfig() {
+            fetch('/api/config')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('configEditor').value = data.config;
+                    } else {
+                        alert('Error loading config: ' + data.error);
+                    }
+                });
+        }
+
+        function saveConfig() {
+            const config = document.getElementById('configEditor').value;
+            fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ config: config })
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.success ? 'Config saved successfully!' : 'Error: ' + data.error);
+            });
+        }
+
+        function applyQuickSettings() {
+            const freq = document.getElementById('freq').value;
+            const pol = document.getElementById('pol').value;
+            const srate = document.getElementById('srate').value;
+            const card = document.getElementById('card').value;
+
+            const newConfig = `# MuMuDVB Configuration - Auto Generated
+# DVB-S/S2 Settings
+freq=${freq}
+pol=${pol}
+srate=${srate}
+card=${card}
+tuner=0
+
+# Autoconfiguration
+autoconfiguration=full
+autoconf_unicast_start_port=8100
+autoconf_multicast_port=1234
+
+# Web interface
+common_port=8887
+
+# CAM support
+cam_support=1
+scam_support=1
+
+# Logging
+log_type=syslog
+log_header=1`;
+
+            fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ config: newConfig })
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.success ? 'Settings applied! Restart MuMuDVB to apply changes.' : 'Error: ' + data.error);
+            });
+        }
+
+        function loadSystemInfo() {
+            fetch('/api/system')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('dvbDevices').textContent = data.dvb_devices;
+                    document.getElementById('diskUsage').textContent = data.disk;
+                    document.getElementById('memoryUsage').textContent = data.memory;
+                });
+        }
+
+        function loadLogs() {
+            fetch('/api/logs')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('systemLogs').textContent = data.logs;
+                });
+        }
+
         // Initialize
         checkStatus();
         setInterval(checkStatus, 5000);
+        
+        // Connect WebSocket
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:8886');
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                console.log('WebSocket data:', data);
+            };
+        }
+        connectWebSocket();
     </script>
 </body>
 </html>
