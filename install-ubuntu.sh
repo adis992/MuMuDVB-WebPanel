@@ -63,27 +63,87 @@ sudo apt install -y \
     gnupg \
     lsb-release
 
-# Install DVB development packages
+# Install DVB development packages with Ubuntu 20.04 compatibility
 print_status "Installing DVB development packages..."
-sudo apt install -y \
-    linux-headers-$(uname -r) \
-    dvb-apps \
-    dvb-tools \
-    w-scan \
-    libdvbv5-dev
 
-# Install additional DVB tools based on Ubuntu version
-UBUNTU_VERSION=$(lsb_release -rs)
+# Detect Ubuntu version first
+UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "20.04")
 print_status "Detected Ubuntu $UBUNTU_VERSION"
 
-if [[ $(echo "$UBUNTU_VERSION >= 22.04" | bc -l) -eq 1 ]]; then
-    print_status "Installing DVB tools for Ubuntu 22.04+..."
-    sudo apt install -y szap-utils libdvbv5-tools || print_warning "Some DVB tools not available"
+# Install kernel headers first
+print_status "Installing kernel headers..."
+sudo apt install -y linux-headers-$(uname -r) || print_warning "Kernel headers installation failed"
+
+# Install DVB packages based on Ubuntu version
+if [[ "$UBUNTU_VERSION" == "20.04" ]]; then
+    print_status "Installing DVB packages for Ubuntu 20.04..."
+    
+    # These packages exist in Ubuntu 20.04
+    AVAILABLE_PACKAGES=""
+    
+    # Check and install available packages one by one
+    for pkg in "dvb-tools" "w-scan" "libdvbv5-dev"; do
+        if apt-cache show "$pkg" &>/dev/null; then
+            AVAILABLE_PACKAGES="$AVAILABLE_PACKAGES $pkg"
+            print_status "Package $pkg is available"
+        else
+            print_warning "Package $pkg not found in Ubuntu 20.04"
+        fi
+    done
+    
+    # Install available packages
+    if [ -n "$AVAILABLE_PACKAGES" ]; then
+        print_status "Installing: $AVAILABLE_PACKAGES"
+        sudo apt install -y $AVAILABLE_PACKAGES || print_warning "Some packages failed to install"
+    fi
+    
+    # For Ubuntu 20.04, szap and libdvbv5-tools don't exist, use alternatives
+    print_status "Setting up DVB tools alternatives for Ubuntu 20.04..."
+    
+    # Try installing alternatives
+    sudo apt install -y dvb-apps 2>/dev/null || print_warning "dvb-apps not available"
+    
+    # Install w_scan if not available
+    if ! command -v w_scan &> /dev/null && ! command -v w-scan &> /dev/null; then
+        print_status "Installing w_scan alternative..."
+        sudo apt install -y w-scan 2>/dev/null || print_warning "w_scan not available via package manager"
+    fi
+
 else
-    print_status "Installing DVB tools for Ubuntu 20.04..."
-    # For Ubuntu 20.04, use alternative packages
-    sudo apt install -y dvb-apps || print_warning "dvb-apps installation failed"
-    # szap is part of dvb-apps in Ubuntu 20.04
+    # For Ubuntu 22.04 and newer
+    print_status "Installing DVB packages for Ubuntu $UBUNTU_VERSION..."
+    sudo apt install -y \
+        dvb-apps \
+        dvb-tools \
+        w-scan \
+        libdvbv5-dev \
+        szap-utils \
+        libdvbv5-tools || print_warning "Some DVB packages not available"
+fi
+
+# Verify what tools we have available
+print_status "Verifying installed DVB tools..."
+DVB_TOOLS_COUNT=0
+
+if command -v w_scan &> /dev/null || command -v w-scan &> /dev/null; then
+    print_success "Channel scanner available: w_scan"
+    DVB_TOOLS_COUNT=$((DVB_TOOLS_COUNT + 1))
+fi
+
+if command -v szap &> /dev/null; then
+    print_success "Tuning tool available: szap" 
+    DVB_TOOLS_COUNT=$((DVB_TOOLS_COUNT + 1))
+fi
+
+if command -v dvb-fe-tool &> /dev/null; then
+    print_success "DVB frontend tool available"
+    DVB_TOOLS_COUNT=$((DVB_TOOLS_COUNT + 1))
+fi
+
+if [ $DVB_TOOLS_COUNT -gt 0 ]; then
+    print_success "DVB tools installation completed ($DVB_TOOLS_COUNT tools available)"
+else
+    print_warning "Limited DVB tools available - MuMuDVB will work with manual configuration"
 fi
 
 # Install w_scan from source if not available in repos
