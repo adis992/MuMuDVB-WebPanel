@@ -18,12 +18,67 @@ print_success() { echo -e "✅ \e[32m$1\e[0m"; }
 print_error() { echo -e "❌ \e[31m$1\e[0m"; exit 1; }
 print_warning() { echo -e "⚠️  \e[33m$1\e[0m"; }
 
-# Cleanup
-print_status "Čišćenje starih procesa..."
-pkill -f mumudvb 2>/dev/null || true
-pkill -f node 2>/dev/null || true
-pkill -f npm 2>/dev/null || true
-rm -rf /tmp/MuMuDVB 2>/dev/null || true
+# ==============================================
+# KOMPLETNA CLEANUP FUNKCIJA - BRIŠE SVE!
+# ==============================================
+
+print_status "🔥 KOMPLETNA CLEANUP - BRISANJE SVEGA!"
+
+# 1. ZAUSTAVI SVE SERVISE
+print_status "Zaustavljam sve servise..."
+systemctl stop mumudvb-webpanel 2>/dev/null || true
+systemctl stop oscam 2>/dev/null || true
+systemctl stop mumudvb 2>/dev/null || true
+systemctl disable mumudvb-webpanel 2>/dev/null || true
+systemctl disable oscam 2>/dev/null || true
+systemctl disable mumudvb 2>/dev/null || true
+
+# 2. UBIJ SVE PROCESE
+print_status "Ubijam sve procese..."
+pkill -9 -f mumudvb 2>/dev/null || true
+pkill -9 -f oscam 2>/dev/null || true
+pkill -9 -f "node.*server.js" 2>/dev/null || true
+pkill -9 -f "node.*8887" 2>/dev/null || true
+pkill -9 -f npm 2>/dev/null || true
+
+# 3. OČISTI PORTOVE
+print_status "Čistim portove 8887, 8886, 8888..."
+fuser -k 8887/tcp 2>/dev/null || true
+fuser -k 8886/tcp 2>/dev/null || true  
+fuser -k 8888/tcp 2>/dev/null || true
+netstat -tlnp | grep ":888[678]" | awk '{print $7}' | cut -d'/' -f1 | xargs -r kill -9 2>/dev/null || true
+
+# 4. OBRIŠI SYSTEMD SERVISE
+print_status "Brisanje systemd servisa...")
+rm -f /etc/systemd/system/mumudvb-webpanel.service
+rm -f /etc/systemd/system/oscam.service
+rm -f /etc/systemd/system/mumudvb.service
+systemctl daemon-reload
+
+# 5. OBRIŠI SVE DIREKTORIJUME I FAJLOVE
+print_status "Brisanje direktorijuma i fajlova..."
+rm -rf /opt/mumudvb-webpanel
+rm -rf /etc/mumudvb
+rm -rf /etc/oscam
+rm -rf /var/log/oscam
+rm -rf /usr/local/var/oscam
+rm -rf /tmp/MuMuDVB
+rm -rf /tmp/oscam*
+
+# 6. OBRIŠI BINARIES (stare verzije)
+print_status "Brisanje starih binary fajlova..."
+rm -f /usr/local/bin/mumudvb
+rm -f /usr/local/bin/oscam
+rm -f /usr/bin/oscam
+
+# 7. OČISTI PID FAJLOVE
+print_status "Brisanje PID fajlova..."
+rm -f /var/run/mumudvb.pid
+rm -f /var/run/oscam.pid
+rm -f /tmp/*.pid
+
+print_success "🔥 KOMPLETNA CLEANUP ZAVRŠENA - SVE OBRISANO!"
+sleep 2
 
 # ==============================================
 # FAZA 1: SISTEM UPDATE
