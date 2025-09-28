@@ -576,7 +576,7 @@ else
 <body><h1>🚀 MuMuDVB Master Panel</h1><p>Panel se učitava...</p>
 <script>setTimeout(() => window.location.reload(), 3000);</script></body></html>
 HTMLEOF
-}
+fi
 print_success "HTML interface kreiran"
 
 # SYSTEMD SERVISI
