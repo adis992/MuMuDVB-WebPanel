@@ -84,12 +84,27 @@ if [ -d "oscam" ]; then
     make allyesconfig CONF_DIR=/var/etc/oscam
     make -j$(nproc) USE_LIBUSB=1 USE_LIBCRYPTO=1 USE_SSL=1
     
-    # Kopiraj u distribution folder kao što si rekao
+    # Kopiraj u distribution folder - traži pravi binary
     mkdir -p distribution
-    cp oscam distribution/oscam
-    # Move u /usr/local/bin kao što radiš  
-    cp distribution/oscam /usr/local/bin/oscam
-    chmod +x /usr/local/bin/oscam
+    
+    # Pronađi oscam binary u Distribution folderu
+    OSCAM_BINARY=$(find Distribution/ -name "oscam*" -type f -executable | head -n 1)
+    if [ -n "$OSCAM_BINARY" ]; then
+        cp "$OSCAM_BINARY" distribution/oscam
+        cp "$OSCAM_BINARY" /usr/local/bin/oscam
+        chmod +x /usr/local/bin/oscam
+        print_success "OSCam binary kopiran: $OSCAM_BINARY -> /usr/local/bin/oscam"
+    else
+        # Fallback - traži bilo koji executable
+        OSCAM_BINARY=$(find . -name "*oscam*" -type f -executable | head -n 1)
+        if [ -n "$OSCAM_BINARY" ]; then
+            cp "$OSCAM_BINARY" /usr/local/bin/oscam
+            chmod +x /usr/local/bin/oscam
+            print_success "OSCam binary fallback kopiran: $OSCAM_BINARY -> /usr/local/bin/oscam"
+        else
+            print_warning "OSCam binary nije pronađen!"
+        fi
+    fi
     
     print_success "OSCam Schimmelreiter smod kompajliran iz lokalnog foldera!"
 else
