@@ -573,7 +573,7 @@ app.use(express.static('public'));
 app.use(express.json());
 
 // WebSocket
-const wss = new WebSocket.Server({ port: 8081 });
+const wss = new WebSocket.Server({ port: 8082 });
 
 function broadcast(data) {
     wss.clients.forEach(client => {
