@@ -535,10 +535,10 @@ cat > package.json << 'EOF'
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.0",
-    "ws": "^8.13.0",
-    "multer": "^1.4.5",
-    "body-parser": "^1.20.0"
+    "express": "^4.18.2",
+    "ws": "^8.14.0",
+    "multer": "^1.4.4",
+    "body-parser": "^1.20.2"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -548,7 +548,7 @@ EOF
 
 # Instaliraj npm pakete
 print_status "Instaliranje npm paketa..."
-$NPM_CMD install --production --no-optional
+$NPM_CMD install --omit=dev --omit=optional
 
 if [ $? -eq 0 ]; then
     print_success "npm paketi instalirani"
