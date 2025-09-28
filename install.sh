@@ -605,34 +605,44 @@ fi
 
 print_success "OSCam kompajliranje uspešno"
 
-# Instaliraj OSCam iz Distribution foldera
-print_status "Instaliranje OSCam-a iz Distribution foldera..."
+# Instaliraj OSCam binary
+print_status "Instaliranje OSCam-a..."
 
-# OSCam se kompajlira u Distribution folder
-if [ -f "Distribution/oscam" ]; then
-    print_success "OSCam binary pronađen u Distribution foldera"
-    
-    # Kopiraj u /usr/local/bin/
-    cp Distribution/oscam /usr/local/bin/oscam
-    chmod +x /usr/local/bin/oscam
-    
-    # Kreiraj simboličku vezu u /usr/bin/
-    ln -sf /usr/local/bin/oscam /usr/bin/oscam
-    
-    print_success "OSCam instaliran u /usr/local/bin/oscam"
+# OSCam binary može biti u build folderu ili Distribution folderu
+OSCAM_BINARY=""
+
+# Prvo traži u build folderu (trenutna lokacija)
+if [ -f "oscam" ]; then
+    OSCAM_BINARY="oscam"
+    print_success "OSCam binary pronađen u build folderu: $PWD/oscam"
+elif [ -f "Distribution/oscam" ]; then
+    OSCAM_BINARY="Distribution/oscam"
+    print_success "OSCam binary pronađen u Distribution folderu"
 else
-    print_error "OSCam binary NIJE pronađen u Distribution foldera!"
+    # Debug - vidi sadržaj trenutnog foldera
+    print_status "Sadržaj trenutnog foldera (build):"
+    ls -la . | grep oscam
     
-    # Debug - vidi šta je u Distribution folderu
     print_status "Sadržaj Distribution foldera:"
     ls -la Distribution/ 2>/dev/null || echo "Distribution folder ne postoji"
     
-    # Pokušaj da nađeš oscam binary
-    print_status "Tražim OSCam binary..."
-    find . -name "oscam" -type f 2>/dev/null | head -5
+    # Pokušaj da nađeš oscam binary bilo gde
+    print_status "Tražim OSCam binary u celom source folderu..."
+    find .. -name "oscam" -type f 2>/dev/null | head -10
     
+    print_error "OSCam binary NIJE pronađen!"
     exit 1
 fi
+
+# Kopiraj binary na pravo mesto
+print_status "Kopiram OSCam binary: $OSCAM_BINARY -> /usr/local/bin/oscam"
+cp "$OSCAM_BINARY" /usr/local/bin/oscam
+chmod +x /usr/local/bin/oscam
+
+# Kreiraj simboličku vezu u /usr/bin/
+ln -sf /usr/local/bin/oscam /usr/bin/oscam
+
+print_success "OSCam instaliran u /usr/local/bin/oscam"
 
 # Kreiraj OSCam direktorijume
 mkdir -p /etc/oscam
