@@ -56,6 +56,7 @@ sudo apt install -y \
     vim \
     htop \
     unzip \
+    bc \
     software-properties-common \
     apt-transport-https \
     ca-certificates \
@@ -69,9 +70,36 @@ sudo apt install -y \
     dvb-apps \
     dvb-tools \
     w-scan \
-    szap \
-    libdvbv5-dev \
-    libdvbv5-tools
+    libdvbv5-dev
+
+# Install additional DVB tools based on Ubuntu version
+UBUNTU_VERSION=$(lsb_release -rs)
+print_status "Detected Ubuntu $UBUNTU_VERSION"
+
+if [[ $(echo "$UBUNTU_VERSION >= 22.04" | bc -l) -eq 1 ]]; then
+    print_status "Installing DVB tools for Ubuntu 22.04+..."
+    sudo apt install -y szap-utils libdvbv5-tools || print_warning "Some DVB tools not available"
+else
+    print_status "Installing DVB tools for Ubuntu 20.04..."
+    # For Ubuntu 20.04, use alternative packages
+    sudo apt install -y dvb-apps || print_warning "dvb-apps installation failed"
+    # szap is part of dvb-apps in Ubuntu 20.04
+fi
+
+# Install w_scan from source if not available in repos
+if ! command -v w_scan &> /dev/null; then
+    print_status "w_scan not found, installing from source..."
+    cd /tmp
+    wget -q http://wirbel.htpc-forum.de/w_scan/w_scan-20170107.tar.bz2 || print_warning "Could not download w_scan source"
+    if [ -f w_scan-20170107.tar.bz2 ]; then
+        tar -xjf w_scan-20170107.tar.bz2
+        cd w_scan-20170107
+        make && sudo make install
+        cd ..
+        rm -rf w_scan-20170107*
+        print_success "w_scan installed from source"
+    fi
+fi
 
 # Install Node.js 18.x LTS
 print_status "Installing Node.js 18.x LTS..."
