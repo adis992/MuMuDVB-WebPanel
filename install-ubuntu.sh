@@ -101,43 +101,65 @@ if ! command -v w_scan &> /dev/null; then
     fi
 fi
 
-# Remove old Node.js if installed
-print_status "Removing old Node.js version..."
-sudo apt remove -y nodejs npm nodejs-doc || true
+# Complete Node.js cleanup and fresh installation
+print_status "Performing complete Node.js cleanup..."
+
+# Remove all existing Node.js installations
+sudo apt remove -y nodejs npm nodejs-doc libnode-dev node-gyp 2>/dev/null || true
+sudo snap remove node 2>/dev/null || true
 sudo apt autoremove -y
 
-# Install Node.js 18.x LTS from NodeSource
-print_status "Installing Node.js 18.x LTS..."
+# Clean up any remaining nodejs files
+sudo rm -rf /usr/local/bin/node /usr/local/bin/npm
+sudo rm -rf /usr/local/lib/node_modules
+sudo rm -rf ~/.npm ~/.node-gyp
+
+# Remove NodeSource repository if exists
+sudo rm -f /etc/apt/sources.list.d/nodesource.list
+sudo apt update
+
+print_status "Installing Node.js 18.x LTS from NodeSource..."
+
+# Fresh NodeSource setup
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+
+# Install Node.js
 sudo apt install -y nodejs
 
-# Verify Node.js and npm installation
-if command -v node &> /dev/null && command -v npm &> /dev/null; then
-    NODE_VERSION=$(node --version)
-    NPM_VERSION=$(npm --version)
+# Verify installation works
+print_status "Verifying Node.js installation..."
+if /usr/bin/node --version &> /dev/null && /usr/bin/npm --version &> /dev/null; then
+    NODE_VERSION=$(/usr/bin/node --version)
+    NPM_VERSION=$(/usr/bin/npm --version)
     print_success "Node.js installed: $NODE_VERSION"
     print_success "npm installed: $NPM_VERSION"
+    
+    # Set up proper PATH
+    echo 'export PATH="/usr/bin:$PATH"' >> ~/.bashrc
+    export PATH="/usr/bin:$PATH"
+    
 else
-    print_error "Node.js or npm installation failed!"
-    print_status "Trying alternative installation method..."
+    print_error "NodeSource installation failed. Trying direct binary installation..."
     
-    # Alternative: install npm separately
-    sudo apt install -y npm
+    # Download and install Node.js binaries directly
+    cd /tmp
+    wget https://nodejs.org/dist/v18.18.0/node-v18.18.0-linux-x64.tar.xz
+    tar -xf node-v18.18.0-linux-x64.tar.xz
+    sudo cp -r node-v18.18.0-linux-x64/{bin,include,lib,share} /usr/local/
+    sudo ln -sf /usr/local/bin/node /usr/bin/node
+    sudo ln -sf /usr/local/bin/npm /usr/bin/npm
     
-    # If still not working, install from snap
-    if ! command -v npm &> /dev/null; then
-        print_status "Installing Node.js via snap..."
-        sudo snap install node --classic
-    fi
+    # Clean up
+    rm -rf /tmp/node-v18.18.0*
     
-    # Final verification
+    # Final check
     if command -v node &> /dev/null && command -v npm &> /dev/null; then
         NODE_VERSION=$(node --version)
         NPM_VERSION=$(npm --version)
-        print_success "Node.js installed (alternative method): $NODE_VERSION"
+        print_success "Node.js installed (binary): $NODE_VERSION"
         print_success "npm installed: $NPM_VERSION"
     else
-        print_error "Failed to install Node.js and npm. Please install manually."
+        print_error "All Node.js installation methods failed!"
         exit 1
     fi
 fi
