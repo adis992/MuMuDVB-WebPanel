@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MuMuDVB Web Panel</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MuMuDVB Management Panel</h1>
+            <p>Upravljanje DVB stream-ovima i automatska konfiguracija</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('scan')">Skeniranje kanala</button>
+            <button class="tab-button" onclick="showTab('config')">Konfiguracija</button>
+            <button class="tab-button" onclick="showTab('oscam')">OSCam integracija</button>
+            <button class="tab-button" onclick="showTab('monitor')">Monitoring</button>
+            <button class="tab-button" onclick="showTab('stream')">Stream informacije</button>
+        </div>
+
+        <!-- Tab: Skeniranje kanala -->
+        <div id="scan" class="tab-content active">
+            <h2>Automatsko skeniranje kanala</h2>
+            <div class="card">
+                <h3>DVB Parametri</h3>
+                <form id="scanForm">
+                    <div class="form-group">
+                        <label for="adapter">DVB Adapter:</label>
+                        <select id="adapter" name="adapter">
+                            <option value="0">Adapter 0</option>
+                            <option value="1">Adapter 1</option>
+                            <option value="2">Adapter 2</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="dvbType">Tip DVB-a:</label>
+                        <select id="dvbType" name="dvbType" onchange="updateDVBParams()">
+                            <option value="dvb-s">DVB-S/S2 (Satelit)</option>
+                            <option value="dvb-t">DVB-T/T2 (Terestrijal)</option>
+                            <option value="dvb-c">DVB-C (Kabal)</option>
+                        </select>
+                    </div>
+                    
+                    <div id="dvb-s-params" class="dvb-params">
+                        <div class="form-group">
+                            <label for="frequency">Frekvencija (MHz):</label>
+                            <input type="number" id="frequency" name="frequency" value="11296" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="polarization">Polarizacija:</label>
+                            <select id="polarization" name="polarization">
+                                <option value="h">Horizontalna (H)</option>
+                                <option value="v">Vertikalna (V)</option>
+                                <option value="l">Leva (L)</option>
+                                <option value="r">Desna (R)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="symbolrate">Symbol Rate:</label>
+                            <input type="number" id="symbolrate" name="symbolrate" value="27500" step="1">
+                        </div>
+                    </div>
+                    
+                    <div id="dvb-t-params" class="dvb-params" style="display: none;">
+                        <div class="form-group">
+                            <label for="tfrequency">Frekvencija (Hz):</label>
+                            <input type="number" id="tfrequency" name="tfrequency" value="506000000" step="1000">
+                        </div>
+                        <div class="form-group">
+                            <label for="bandwidth">Propusni opseg:</label>
+                            <select id="bandwidth" name="bandwidth">
+                                <option value="8">8 MHz</option>
+                                <option value="7">7 MHz</option>
+                                <option value="6">6 MHz</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button type="button" onclick="startScan()" class="btn-primary">Započni skeniranje</button>
+                    <button type="button" onclick="stopScan()" class="btn-secondary">Zaustavi skeniranje</button>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h3>Rezultati skeniranja</h3>
+                <div id="scanResults">
+                    <p>Pokrenite skeniranje da biste videli dostupne kanale...</p>
+                </div>
+                <div id="scanProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                    <p id="scanStatus">Skeniranje u toku...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Konfiguracija -->
+        <div id="config" class="tab-content">
+            <h2>MuMuDVB Konfiguracija</h2>
+            <div class="card">
+                <h3>Opšte postavke</h3>
+                <form id="configForm">
+                    <div class="form-group">
+                        <label for="card">DVB kartice:</label>
+                        <input type="number" id="card" name="card" value="0" min="0" max="7">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="autoconfiguration" name="autoconfiguration" checked>
+                            Automatska konfiguracija
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="multicast_ttl">Multicast TTL:</label>
+                        <input type="number" id="multicast_ttl" name="multicast_ttl" value="2" min="1" max="255">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="port_http">HTTP port:</label>
+                        <input type="number" id="port_http" name="port_http" value="4242" min="1" max="65535">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="unicast" name="unicast" checked>
+                            Omogući HTTP unicast
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="sap" name="sap" checked>
+                            SAP announces
+                        </label>
+                    </div>
+                    
+                    <button type="button" onclick="generateConfig()" class="btn-primary">Generiši konfiguraciju</button>
+                    <button type="button" onclick="saveConfig()" class="btn-success">Sačuvaj konfiguraciju</button>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h3>Konfiguracijski fajl</h3>
+                <textarea id="configOutput" rows="20" cols="80" placeholder="Konfiguracijski fajl će biti prikazan ovde..."></textarea>
+                <br>
+                <button onclick="downloadConfig()" class="btn-secondary">Preuzmi .conf fajl</button>
+            </div>
+        </div>
+
+        <!-- Tab: OSCam integracija -->
+        <div id="oscam" class="tab-content">
+            <h2>OSCam integracija</h2>
+            <div class="card">
+                <h3>OSCam konfiguracija</h3>
+                <form id="oscamForm">
+                    <div class="form-group">
+                        <label for="oscam_host">OSCam server:</label>
+                        <input type="text" id="oscam_host" name="oscam_host" value="127.0.0.1" placeholder="IP adresa">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="oscam_port">OSCam port:</label>
+                        <input type="number" id="oscam_port" name="oscam_port" value="9000" min="1" max="65535">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="scam_support" name="scam_support">
+                            Omogući softversko descrambling
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="decsa_delay">DECSA kašnjenje (μs):</label>
+                        <input type="number" id="decsa_delay" name="decsa_delay" value="500000" step="1000">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="send_delay">Send kašnjenje (μs):</label>
+                        <input type="number" id="send_delay" name="send_delay" value="400000" step="1000">
+                    </div>
+                    
+                    <button type="button" onclick="testOscamConnection()" class="btn-primary">Testiraj konekciju</button>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h3>Status descrambling-a</h3>
+                <div id="descramblingStatus">
+                    <p>Testirajte konekciju sa OSCam serverom...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Monitoring -->
+        <div id="monitor" class="tab-content">
+            <h2>Sistem monitoring</h2>
+            <div class="card">
+                <h3>Status servisa</h3>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <h4>MuMuDVB</h4>
+                        <span id="mumudvb-status" class="status offline">Offline</span>
+                        <button onclick="toggleService('mumudvb')" class="btn-small">Toggle</button>
+                    </div>
+                    <div class="status-item">
+                        <h4>OSCam</h4>
+                        <span id="oscam-status" class="status offline">Offline</span>
+                        <button onclick="toggleService('oscam')" class="btn-small">Toggle</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Signal informacije</h3>
+                <div id="signalInfo">
+                    <div class="signal-meter">
+                        <label>Signal snaga:</label>
+                        <div class="meter">
+                            <div id="signalStrength" class="meter-fill" style="width: 0%"></div>
+                        </div>
+                        <span id="signalValue">0%</span>
+                    </div>
+                    
+                    <div class="signal-meter">
+                        <label>Signal kvalitet (SNR):</label>
+                        <div class="meter">
+                            <div id="signalQuality" class="meter-fill" style="width: 0%"></div>
+                        </div>
+                        <span id="qualityValue">0 dB</span>
+                    </div>
+                    
+                    <div class="signal-meter">
+                        <label>BER:</label>
+                        <span id="berValue">0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Logovi</h3>
+                <div id="logOutput" class="log-output">
+                    <p>Logovi se učitavaju...</p>
+                </div>
+                <button onclick="clearLogs()" class="btn-secondary">Obriši logove</button>
+                <button onclick="refreshLogs()" class="btn-primary">Osveži logove</button>
+            </div>
+        </div>
+
+        <!-- Tab: Stream informacije -->
+        <div id="stream" class="tab-content">
+            <h2>Stream informacije</h2>
+            <div class="card">
+                <h3>Aktuelni stream-ovi</h3>
+                <div id="streamList">
+                    <p>Učitavanje stream informacija...</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Kvalitet stream-a</h3>
+                <table id="streamQuality" class="stream-table">
+                    <thead>
+                        <tr>
+                            <th>Kanal</th>
+                            <th>Multicast IP</th>
+                            <th>Port</th>
+                            <th>Bitrate</th>
+                            <th>Paketi/s</th>
+                            <th>Status</th>
+                            <th>Akcije</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="7">Nema aktivnih stream-ova</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

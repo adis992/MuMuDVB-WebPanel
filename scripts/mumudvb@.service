@@ -1,0 +1,29 @@
+[Unit]
+Description=MuMuDVB DVB Streaming Server (Adapter %i)
+After=network.target
+
+[Service]
+Type=forking
+User=mumudvb
+Group=mumudvb
+WorkingDirectory=/etc/mumudvb
+ExecStart=/usr/local/bin/mumudvb -d -c /etc/mumudvb/mumudvb-%i.conf
+PIDFile=/var/run/mumudvb/mumudvb-%i.pid
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/mumudvb /var/run/mumudvb
+DeviceAllow=/dev/dvb rw
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mumudvb-%i
+
+[Install]
+WantedBy=multi-user.target
