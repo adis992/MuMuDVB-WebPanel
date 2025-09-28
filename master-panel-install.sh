@@ -55,9 +55,9 @@ apt install -y dvb-tools w-scan libdvbv5-dev 2>/dev/null || true
 
 # MUMUDVB KOMPAJLIRANJE IZ LOKALNOG FOLDERA
 print_status "MuMuDVB kompajliranje iz projekta..."
-cd /opt/mumudvb-webpanel
-if [ -d "MuMuDVB" ]; then
-    cd MuMuDVB
+CURRENT_DIR=$(pwd)
+if [ -d "$CURRENT_DIR/MuMuDVB" ]; then
+    cd "$CURRENT_DIR/MuMuDVB"
     make clean 2>/dev/null || true
     autoreconf -i -f
     ./configure --enable-cam-support --enable-scam-support
@@ -65,12 +65,12 @@ if [ -d "MuMuDVB" ]; then
     make install
     print_success "MuMuDVB instaliran iz lokalnog foldera: $(which mumudvb)"
 else
-    print_error "MuMuDVB folder ne postoji u projektu!"
+    print_error "MuMuDVB folder ne postoji u projektu! Pokreni iz MuMuDVB-WebPanel foldera!"
 fi
 
 # OSCAM KOMPAJLIRANJE IZ LOKALNOG FOLDERA - SCHIMMELREITER SMOD
 print_status "OSCam Schimmelreiter smod kompajliranje iz projekta..."
-cd /opt/mumudvb-webpanel
+cd "$CURRENT_DIR"
 if [ -d "oscam" ]; then
     cd oscam
     make clean 2>/dev/null || true
@@ -300,11 +300,12 @@ print_success "W-Scan config kreiran"
 
 # WEB PANEL - COPY IZ PROJEKTA
 print_status "Master Web Panel kreiranje..."
+mkdir -p /opt/mumudvb-webpanel
 cd /opt/mumudvb-webpanel
 
-# Copy web_panel folder ako postoji
-if [ -d "web_panel" ]; then
-    cp -r web_panel/* . 2>/dev/null || true
+# Copy web_panel folder ako postoji iz projekta
+if [ -d "$CURRENT_DIR/web_panel" ]; then
+    cp -r "$CURRENT_DIR/web_panel"/* . 2>/dev/null || true
     print_success "Web panel fajlovi kopirani iz projekta"
 fi
 
@@ -543,7 +544,10 @@ print_success "Master server.js kreiran"
 
 # COPY HTML INTERFACE
 print_status "HTML interface kreiranje..."
-cp /opt/mumudvb-webpanel/master-index.html /opt/mumudvb-webpanel/public/index.html 2>/dev/null || {
+if [ -f "$CURRENT_DIR/web_panel/master-index.html" ]; then
+    cp "$CURRENT_DIR/web_panel/master-index.html" /opt/mumudvb-webpanel/public/index.html
+    print_success "master-index.html kopiran"
+else
     # Ako nema master-index.html, kreiraj osnovni
     cat > /opt/mumudvb-webpanel/public/index.html << 'HTMLEOF'
 <!DOCTYPE html><html><head><title>MuMuDVB Master Panel</title></head>
