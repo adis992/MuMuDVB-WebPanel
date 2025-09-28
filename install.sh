@@ -53,9 +53,12 @@ apt install -y \
     gnupg \
     lsb-release \
     software-properties-common \
-    oscam \
     libpcsclite-dev \
-    pcsc-tools
+    pcsc-tools \
+    libssl-dev \
+    libusb-1.0-0-dev \
+    cmake \
+    libz-dev
 
 print_success "Osnovni paketi instalirani"
 
@@ -516,10 +519,188 @@ else
 fi
 
 # ==============================================
-# FAZA 5: WEB PANEL
+# FAZA 6: OSCAM KOMPAJLIRANJE
 # ==============================================
 
-print_status "FAZA 5: Web Panel kreiranje"
+print_status "FAZA 6: OSCam kompajliranje sa patchevima"
+
+cd /tmp
+rm -rf oscam-smod 2>/dev/null || true
+
+print_status "Kloniranje OSCam-smod repozitorijuma..."
+if ! git clone https://github.com/Schimmelreiter/oscam-smod.git; then
+    print_error "Git clone OSCam neuspešan!"
+fi
+
+cd oscam-smod
+print_success "OSCam source kod skinut"
+
+# Pripremi build direktorij
+print_status "Kreiranje build direktorijuma..."
+mkdir -p build
+cd build
+
+# Configure sa svim patch-evima i dodatcima
+print_status "Konfiguracija OSCam build-a..."
+cmake -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DWEBIF=ON \
+      -DWITH_SSL=ON \
+      -DWITH_STAPI=OFF \
+      -DWITH_STAPI5=OFF \
+      -DHAVE_LIBUSB=ON \
+      -DWITH_LIBUSB=ON \
+      -DWITH_SMARTREADER=ON \
+      -DWITH_PCSC=ON \
+      -DCS_CACHEEX=ON \
+      -DCS_CACHEEX_AIO=ON \
+      -DMODULE_MONITOR=ON \
+      -DMODULE_CAMD33=ON \
+      -DMODULE_CAMD35=ON \
+      -DMODULE_CAMD35_TCP=ON \
+      -DMODULE_NEWCAMD=ON \
+      -DMODULE_CCCAM=ON \
+      -DMODULE_CCCSHARE=ON \
+      -DMODULE_GBOX=ON \
+      -DMODULE_RADEGAST=ON \
+      -DMODULE_SERIAL=ON \
+      -DMODULE_CONSTCW=ON \
+      -DMODULE_DVBAPI=ON \
+      -DMODULE_SCAM=ON \
+      -DMODULE_GHTTP=ON \
+      -DWITH_NEUTRINO=ON \
+      -DWITH_AZBOX=ON \
+      -DWITH_MCA=ON \
+      -DWITH_COOLAPI=ON \
+      -DWITH_COOLAPI2=ON \
+      -DWITH_SU980=ON \
+      -DWITH_DUCKBOX=ON \
+      -DREADER_NAGRA=ON \
+      -DREADER_NAGRA_MERLIN=ON \
+      -DREADER_IRDETO=ON \
+      -DREADER_CONAX=ON \
+      -DREADER_CRYPTOWORKS=ON \
+      -DREADER_SECA=ON \
+      -DREADER_VIACCESS=ON \
+      -DREADER_VIDEOGUARD=ON \
+      -DREADER_DRE=ON \
+      -DREADER_TONGFANG=ON \
+      -DREADER_BULCRYPT=ON \
+      -DREADER_GRIFFIN=ON \
+      -DREADER_DGCRYPT=ON \
+      ..
+
+if [ $? -ne 0 ]; then
+    print_error "OSCam cmake konfiguracija neuspešna!"
+fi
+
+print_success "OSCam cmake konfiguracija uspešna"
+
+# Kompajliraj OSCam
+print_status "Kompajliranje OSCam-a (može potrajati...)..."
+make -j$(nproc)
+
+if [ $? -ne 0 ]; then
+    print_error "OSCam kompajliranje neuspešno!"
+fi
+
+print_success "OSCam kompajliranje uspešno"
+
+# Instaliraj OSCam
+print_status "Instaliranje OSCam-a..."
+make install
+
+# Kreiraj OSCam direktorijume
+mkdir -p /etc/oscam
+mkdir -p /var/log/oscam
+mkdir -p /usr/local/var/oscam
+
+# Test OSCam instalacije
+OSCAM_PATH=$(which oscam 2>/dev/null || echo "/usr/local/bin/oscam")
+if [ -x "$OSCAM_PATH" ]; then
+    OSCAM_VERSION=$($OSCAM_PATH --build-info 2>&1 | head -1 || echo "Version unknown")
+    print_success "OSCam instaliran: $OSCAM_PATH"
+    print_success "OSCam verzija: $OSCAM_VERSION"
+else
+    print_warning "OSCam instalacija verification failed - nastavljam"
+fi
+
+# Kreiraj osnovnu OSCam konfiguraciju
+print_status "Kreiranje osnovne OSCam konfiguracije..."
+cat > /etc/oscam/oscam.conf << 'EOF'
+# OSCam Configuration - Ubuntu 20.04 MuMuDVB Edition
+[global]
+logfile = /var/log/oscam/oscam.log
+disablelog = 0
+disableuserfile = 0
+usrfileflag = 0
+clienttimeout = 5000
+fallbacktimeout = 2500
+clientmaxidle = 120
+bindwait = 120
+netprio = 0
+sleep = 0
+unlockparental = 0
+nice = 99
+maxlogsize = 10
+waitforcards = 1
+preferlocalcards = 1
+saveinithistory = 1
+readerrestartseconds = 5
+
+[monitor]
+port = 988
+aulow = 120
+monlevel = 1
+
+[webif]
+httpport = 8888
+httpuser = admin
+httppwd = admin
+httpallowed = 127.0.0.1,192.168.1.1-192.168.255.255
+
+[dvbapi]
+enabled = 1
+au = 1
+user = mumudvb
+boxtype = pc
+
+[account]
+user = mumudvb
+pwd = mumudvb
+group = 1
+au = 1
+EOF
+
+print_success "OSCam osnovni config kreiran"
+
+# OSCam systemd servis
+print_status "Kreiranje OSCam systemd servisa..."
+cat > /etc/systemd/system/oscam.service << 'EOF'
+[Unit]
+Description=OSCam - Software CAM
+After=network.target
+
+[Service]
+Type=forking
+User=root
+ExecStart=/usr/local/bin/oscam -b -c /etc/oscam
+PIDFile=/var/run/oscam.pid
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable oscam
+print_success "OSCam systemd servis kreiran"
+
+# ==============================================
+# FAZA 7: WEB PANEL
+# ==============================================
+
+print_status "FAZA 7: Web Panel kreiranje"
 
 WEB_DIR="/opt/mumudvb-webpanel"
 rm -rf $WEB_DIR 2>/dev/null || true
@@ -1434,10 +1615,10 @@ EOF
 print_success "Web panel fajlovi kreirani"
 
 # ==============================================
-# FAZA 6: KONFIGURACIJA
+# FAZA 8: KONFIGURACIJA
 # ==============================================
 
-print_status "FAZA 6: Kreiranje konfiguracije"
+print_status "FAZA 8: Kreiranje konfiguracije"
 
 # MuMuDVB config
 mkdir -p /etc/mumudvb
