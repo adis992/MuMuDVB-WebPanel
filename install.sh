@@ -193,10 +193,60 @@ ln -sf $(which node) /usr/local/bin/node 2>/dev/null || true
 ln -sf $(which npm) /usr/local/bin/npm 2>/dev/null || true
 
 # ==============================================
-# FAZA 3: DVB PAKETI (SAMO KOJI POSTOJE U UBUNTU 20.04)
+# FAZA 3: GETTEXT & AUTOTOOLS
 # ==============================================
 
-print_status "FAZA 3: DVB paketi za Ubuntu 20.04"
+print_status "FAZA 3: Gettext & autotools instalacija"
+
+# Kritični paketi za MuMuDVB build
+GETTEXT_PACKAGES=("gettext" "gettext-base" "autopoint" "autoconf" "automake" "libtool" "intltool" "dh-autoreconf")
+
+for pkg in "${GETTEXT_PACKAGES[@]}"; do
+    print_status "Instaliram $pkg..."
+    apt install -y "$pkg" || print_warning "$pkg instalacija neuspešna"
+done
+
+# Forsiraj reinstall autopoint ako ne radi
+if ! command -v autopoint &>/dev/null; then
+    print_warning "autopoint nije dostupan, forsiram reinstall..."
+    apt remove --purge -y autopoint gettext 2>/dev/null || true
+    apt install -y gettext autopoint
+fi
+
+# Test autopoint detaljno
+print_status "Testiram autopoint dostupnost..."
+if command -v autopoint &>/dev/null; then
+    AUTOPOINT_PATH=$(which autopoint)
+    print_success "autopoint je dostupan: $AUTOPOINT_PATH"
+    
+    # Test da li može da se pokrene
+    if autopoint --version &>/dev/null; then
+        AUTOPOINT_VERSION=$(autopoint --version | head -1)
+        print_success "autopoint verzija: $AUTOPOINT_VERSION"
+    else
+        print_warning "autopoint se ne može pokrenuti!"
+        # Pokušaj fix permissions
+        chmod +x "$AUTOPOINT_PATH" 2>/dev/null || true
+    fi
+else
+    print_error "autopoint NIJE dostupan nakon instalacije!"
+    
+    # Debug - probaj da nađeš gde je
+    print_status "Tražim autopoint fajlove..."
+    find /usr -name "*autopoint*" 2>/dev/null | head -10 || true
+    
+    # Pokušaj simboličku vezu
+    if [ -f "/usr/bin/autopoint" ]; then
+        print_status "Našao /usr/bin/autopoint, ali command ne radi..."
+        ls -la /usr/bin/autopoint
+    fi
+fi
+
+# ==============================================
+# FAZA 4: DVB PAKETI
+# ==============================================
+
+print_status "FAZA 4: DVB paketi instalacija"
 
 # Lista paketa koji STVARNO postoje u Ubuntu 20.04
 DVB_PACKAGES=("dvb-tools" "w-scan" "libdvbv5-dev")
@@ -226,10 +276,10 @@ print_warning "  ❌ libdvbv5-tools (uklonjen iz repozitorijuma)"
 print_warning "  ℹ️  MuMuDVB će raditi i bez njih!"
 
 # ==============================================
-# FAZA 4: MUMUDVB KOMPAJLIRANJE
+# FAZA 5: MUMUDVB KOMPAJLIRANJE
 # ==============================================
 
-print_status "FAZA 4: MuMuDVB kompajliranje"
+print_status "FAZA 5: MuMuDVB kompajliranje"
 
 cd /tmp
 rm -rf MuMuDVB 2>/dev/null || true
@@ -242,51 +292,44 @@ fi
 cd MuMuDVB
 print_success "MuMuDVB source kod skinut"
 
-# Generiši configure script
+# Generiš configure script (autopoint je već instaliran u FAZA 3)
 if [ ! -f "./configure" ]; then
     print_status "Generiram configure script..."
     
-    # Proverava da li je autopoint dostupan
-    if ! command -v autopoint &>/dev/null; then
-        print_warning "autopoint nije dostupan, instaliram gettext pakete..."
-        apt update
+    # Proveri da li je autopoint stvarno dostupan
+    if command -v autopoint &>/dev/null; then
+        print_success "autopoint je dostupan: $(which autopoint)"
+    else
+        print_error "autopoint NIJE dostupan! Instaliram hitno..."
         apt install -y gettext gettext-base autopoint intltool
     fi
     
-    if [ -f "./autogen.sh" ]; then
-        print_status "Pokrećem autogen.sh..."
+    # Pokušaj autoreconf sa verbose output
+    print_status "Pokrećem autoreconf sa detaljnim logom..."
+    if autoreconf -fiv --install; then
+        print_success "autoreconf uspešan!"
+    elif [ -f "./autogen.sh" ]; then
+        print_warning "autoreconf failed, pokušavam autogen.sh..."
         chmod +x autogen.sh
-        if ! ./autogen.sh; then
-            print_warning "autogen.sh failed, pokušavam autoreconf..."
-            autoreconf -fiv || {
-                print_warning "autoreconf failed, pokušavam bez gettext..."
-                # Pokušaj bez gettext podrške
-                autoreconf -fiv --force || {
-                    print_error "Ne mogu da generiram configure script!"
-                }
-            }
+        if ./autogen.sh; then
+            print_success "autogen.sh uspešan!"
+        else
+            print_error "I autogen.sh je neuspešan!"
         fi
     else
-        print_status "Pokrećem autoreconf..."
-        if ! autoreconf -fiv; then
-            print_warning "autoreconf failed, pokušavam bez gettext..."
-            # Alternative: create minimal configure script
-            print_status "Kreiram minimalnu configure skriptu..."
-            if [ -f "configure.ac" ] || [ -f "configure.in" ]; then
-                autoconf || {
-                    print_error "Ne mogu da generiram configure script ni sa autoconf!"
-                }
-            else
-                print_error "Nema configure.ac ili configure.in fajla!"
-            fi
+        print_warning "Nema autogen.sh, pokušavam osnovni autoconf..."
+        if autoconf; then
+            print_success "autoconf uspešan!"
+        else
+            print_error "Sve metode neuspešne!"
         fi
     fi
     
-    if [ ! -f "./configure" ]; then
-        print_error "Configure script generation potpuno neuspešan!"
+    if [ -f "./configure" ]; then
+        print_success "Configure script uspešno kreiran!"
+    else
+        print_error "Configure script NIJE kreiran!"
     fi
-    
-    print_success "Configure script kreiran"
 fi
 
 # Configure MuMuDVB
