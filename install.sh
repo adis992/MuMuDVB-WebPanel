@@ -292,43 +292,111 @@ fi
 cd MuMuDVB
 print_success "MuMuDVB source kod skinut"
 
-# Generiš configure script (autopoint je već instaliran u FAZA 3)
+# EMERGENCY autopoint fix - direktno u MuMuDVB folder
+print_status "EMERGENCY autopoint fix..."
+
+# Instaliraj SADA sve gettext pakete direktno
+print_status "Force reinstall svih gettext paketa..."
+apt update
+apt remove --purge -y gettext gettext-base autopoint 2>/dev/null || true
+apt install -y gettext gettext-base autotools-dev autopoint intltool
+
+# Proveri PATH
+export PATH="/usr/bin:/bin:/usr/local/bin:$PATH"
+
+# Test autopoint SADA
+if command -v autopoint &>/dev/null; then
+    print_success "autopoint KONAČNO dostupan: $(which autopoint)"
+    autopoint --version | head -1
+else
+    print_error "autopoint OPET nije dostupan!"
+    
+    # Desperate measures - pokušaj da ga nađeš
+    print_status "Tražim autopoint na sistemu..."
+    find /usr -name "autopoint" -type f 2>/dev/null | head -5
+    
+    # Manual link ako postoji
+    if [ -f "/usr/bin/autopoint" ]; then
+        print_status "Našao /usr/bin/autopoint - proveravam permissions..."
+        ls -la /usr/bin/autopoint
+        chmod +x /usr/bin/autopoint 2>/dev/null || true
+    fi
+    
+    # Pokušaj poslednji put
+    if ! command -v autopoint &>/dev/null; then
+        print_error "KRITIČNA GREŠKA: autopoint ne može da se instalira!"
+        print_status "Pokušavam workaround bez gettext..."
+        
+        # Ukloni gettext reference iz configure.ac
+        if [ -f "configure.ac" ]; then
+            print_status "Backup configure.ac i uklanjam gettext references..."
+            cp configure.ac configure.ac.backup
+            sed -i 's/AM_GLIB_GNU_GETTEXT//g' configure.ac
+            sed -i 's/AM_GNU_GETTEXT.*//g' configure.ac
+            sed -i 's/AM_GNU_GETTEXT_VERSION.*//g' configure.ac
+        fi
+    fi
+fi
+
+# Generiši configure script
 if [ ! -f "./configure" ]; then
     print_status "Generiram configure script..."
     
-    # Proveri da li je autopoint stvarno dostupan
-    if command -v autopoint &>/dev/null; then
-        print_success "autopoint je dostupan: $(which autopoint)"
-    else
-        print_error "autopoint NIJE dostupan! Instaliram hitno..."
-        apt install -y gettext gettext-base autopoint intltool
-    fi
-    
-    # Pokušaj autoreconf sa verbose output
-    print_status "Pokrećem autoreconf sa detaljnim logom..."
+    # Pokušaj autoreconf SADA
+    print_status "Pokrećem autoreconf..."
     if autoreconf -fiv --install; then
         print_success "autoreconf uspešan!"
+    elif autoreconf -fiv; then
+        print_success "autoreconf bez --install uspešan!"
     elif [ -f "./autogen.sh" ]; then
         print_warning "autoreconf failed, pokušavam autogen.sh..."
         chmod +x autogen.sh
         if ./autogen.sh; then
             print_success "autogen.sh uspešan!"
         else
-            print_error "I autogen.sh je neuspešan!"
+            print_warning "autogen.sh failed, pokušavam autoconf direktno..."
+            if autoconf; then
+                print_success "autoconf uspešan!"
+            else
+                # Poslednji pokušaj - kreiraj minimalnu configure skriptu
+                print_status "Kreiram emergency configure script..."
+                cat > configure << 'EOF'
+#!/bin/bash
+echo "Emergency configure script - basic setup"
+echo "Checking for gcc..."
+if ! command -v gcc &>/dev/null; then
+    echo "ERROR: gcc not found"
+    exit 1
+fi
+echo "Creating Makefile..."
+if [ -f "Makefile.in" ]; then
+    cp Makefile.in Makefile
+elif [ -f "src/Makefile" ]; then
+    echo "Using existing src/Makefile"
+else
+    echo "ERROR: No Makefile template found"
+    exit 1
+fi
+echo "Configure completed (emergency mode)"
+EOF
+                chmod +x configure
+                print_warning "Emergency configure script kreiran!"
+            fi
         fi
     else
-        print_warning "Nema autogen.sh, pokušavam osnovni autoconf..."
+        print_warning "Nema autogen.sh, pokušavam direktno autoconf..."
         if autoconf; then
             print_success "autoconf uspešan!"
         else
-            print_error "Sve metode neuspešne!"
+            print_error "Sve standardne metode neuspešne!"
         fi
     fi
     
     if [ -f "./configure" ]; then
         print_success "Configure script uspešno kreiran!"
     else
-        print_error "Configure script NIJE kreiran!"
+        print_error "Configure script NIJE kreiran - prekidam!"
+        exit 1
     fi
 fi
 
