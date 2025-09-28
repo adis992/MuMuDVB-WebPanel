@@ -5,9 +5,17 @@
 ## BRZA INSTALACIJA
 
 ```bash
-wget https://raw.githubusercontent.com/adis992/MuMuDVB-WebPanel/main/master-panel-install.sh
+git clone https://github.com/adis992/MuMuDVB-WebPanel.git
+cd MuMuDVB-WebPanel
 chmod +x master-panel-install.sh
 sudo ./master-panel-install.sh
+```
+
+**ILI ALTERNATIVNO:**
+```bash
+git clone https://github.com/adis992/MuMuDVB-WebPanel.git
+cd MuMuDVB-WebPanel  
+sudo bash master-panel-install.sh
 ```
 
 **TO JE TO! GOTOVO!** ✅
