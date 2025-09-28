@@ -23,6 +23,10 @@ sudo apt install -y \
     curl \
     vim \
     htop \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
     linux-headers-$(uname -r)
 
 # Samo sigurni DVB paketi
@@ -33,18 +37,67 @@ sudo apt install -y libdvbv5-dev 2>/dev/null || true
 
 print_success "Osnovni paketi instalirani!"
 
-# Node.js 18
-print_status "Instaliranje Node.js 18..."
+# Node.js 18 - kompletno ukloni stare verzije prvo
+print_status "Kompletno uklanjanje starih Node.js verzija..."
+sudo pkill -f node 2>/dev/null || true
+sudo pkill -f npm 2>/dev/null || true
+
+# Ukloni sve postojeće instalacije
+sudo apt remove -y nodejs npm nodejs-doc libnode-dev node-gyp 2>/dev/null || true
+sudo snap remove node 2>/dev/null || true
+sudo apt autoremove -y
+
+# Obriši fajlove
+sudo rm -rf /usr/local/bin/node /usr/local/bin/npm 2>/dev/null || true
+sudo rm -rf /usr/local/lib/node_modules 2>/dev/null || true
+sudo rm -rf ~/.npm ~/.node-gyp 2>/dev/null || true
+sudo rm -f /etc/apt/sources.list.d/nodesource.list 2>/dev/null || true
+
+print_status "Instaliranje čiste Node.js 18 verzije..."
+# Reinstaliraj NodeSource repo
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt update
 sudo apt install -y nodejs
 
-# Provera Node.js
-if command -v node &> /dev/null && command -v npm &> /dev/null; then
-    print_success "Node.js: $(node --version)"
-    print_success "npm: $(npm --version)"
+# Čekaj da se instaliraj
+sleep 3
+
+# Test installation - koristi punu putanju
+if /usr/bin/node --version &> /dev/null && /usr/bin/npm --version &> /dev/null; then
+    NODE_VERSION=$(/usr/bin/node --version)
+    NPM_VERSION=$(/usr/bin/npm --version)
+    print_success "Node.js: $NODE_VERSION"
+    print_success "npm: $NPM_VERSION"
+    
+    # Napravi linkove
+    sudo ln -sf /usr/bin/node /usr/local/bin/node 2>/dev/null || true
+    sudo ln -sf /usr/bin/npm /usr/local/bin/npm 2>/dev/null || true
+    
+elif command -v node &> /dev/null && command -v npm &> /dev/null; then
+    NODE_VERSION=$(node --version)
+    NPM_VERSION=$(npm --version)
+    print_success "Node.js: $NODE_VERSION"
+    print_success "npm: $NPM_VERSION"
+    
 else
-    print_error "Node.js instalacija neuspešna!"
-    exit 1
+    print_error "Node.js instalacija neuspešna! Pokušavam alternativno..."
+    
+    # Alternativna instalacija - direktno binaries
+    cd /tmp
+    wget https://nodejs.org/dist/v18.18.0/node-v18.18.0-linux-x64.tar.xz
+    tar -xf node-v18.18.0-linux-x64.tar.xz
+    sudo cp -r node-v18.18.0-linux-x64/{bin,include,lib,share} /usr/local/
+    rm -rf node-v18.18.0*
+    
+    if /usr/local/bin/node --version &> /dev/null && /usr/local/bin/npm --version &> /dev/null; then
+        NODE_VERSION=$(/usr/local/bin/node --version)
+        NPM_VERSION=$(/usr/local/bin/npm --version)
+        print_success "Node.js (binary): $NODE_VERSION"
+        print_success "npm (binary): $NPM_VERSION"
+    else
+        print_error "Svi načini instalacije Node.js su neuspešni!"
+        exit 1
+    fi
 fi
 
 # Skidanje MuMuDVB
@@ -56,6 +109,24 @@ git clone https://github.com/braice/MuMuDVB.git
 # Kompajliranje MuMuDVB
 print_status "Kompajliranje MuMuDVB..."
 cd MuMuDVB
+
+# Check if we need to run autogen first
+if [ ! -f "./configure" ]; then
+    print_status "Configure script ne postoji, pokrećem autogen..."
+    if [ -f "./autogen.sh" ]; then
+        ./autogen.sh
+    elif [ -f "configure.ac" ] || [ -f "configure.in" ]; then
+        print_status "Generiram configure script..."
+        autoreconf -fiv || {
+            print_status "Instaliranje autotools paketa..."
+            sudo apt install -y autoconf automake libtool
+            autoreconf -fiv
+        }
+    else
+        print_error "Ne mogu da nađem način da generiram configure script!"
+        exit 1
+    fi
+fi
 
 # Configure with CAM support
 if ./configure --enable-cam-support --enable-scam-support; then
