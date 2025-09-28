@@ -605,9 +605,34 @@ fi
 
 print_success "OSCam kompajliranje uspešno"
 
-# Instaliraj OSCam
-print_status "Instaliranje OSCam-a..."
-make install
+# Instaliraj OSCam iz Distribution foldera
+print_status "Instaliranje OSCam-a iz Distribution foldera..."
+
+# OSCam se kompajlira u Distribution folder
+if [ -f "Distribution/oscam" ]; then
+    print_success "OSCam binary pronađen u Distribution foldera"
+    
+    # Kopiraj u /usr/local/bin/
+    cp Distribution/oscam /usr/local/bin/oscam
+    chmod +x /usr/local/bin/oscam
+    
+    # Kreiraj simboličku vezu u /usr/bin/
+    ln -sf /usr/local/bin/oscam /usr/bin/oscam
+    
+    print_success "OSCam instaliran u /usr/local/bin/oscam"
+else
+    print_error "OSCam binary NIJE pronađen u Distribution foldera!"
+    
+    # Debug - vidi šta je u Distribution folderu
+    print_status "Sadržaj Distribution foldera:"
+    ls -la Distribution/ 2>/dev/null || echo "Distribution folder ne postoji"
+    
+    # Pokušaj da nađeš oscam binary
+    print_status "Tražim OSCam binary..."
+    find . -name "oscam" -type f 2>/dev/null | head -5
+    
+    exit 1
+fi
 
 # Kreiraj OSCam direktorijume
 mkdir -p /etc/oscam
@@ -615,13 +640,13 @@ mkdir -p /var/log/oscam
 mkdir -p /usr/local/var/oscam
 
 # Test OSCam instalacije
-OSCAM_PATH=$(which oscam 2>/dev/null || echo "/usr/local/bin/oscam")
+OSCAM_PATH="/usr/local/bin/oscam"
 if [ -x "$OSCAM_PATH" ]; then
     OSCAM_VERSION=$($OSCAM_PATH --build-info 2>&1 | head -1 || echo "Version unknown")
     print_success "OSCam instaliran: $OSCAM_PATH"
     print_success "OSCam verzija: $OSCAM_VERSION"
 else
-    print_warning "OSCam instalacija verification failed - nastavljam"
+    print_error "OSCam nije izvršiv: $OSCAM_PATH"
 fi
 
 # Kreiraj osnovnu OSCam konfiguraciju
