@@ -232,10 +232,12 @@ if command -v node &>/dev/null; then
         NODE_CMD="node"
         NPM_CMD="npm"
         
-        # Install/update npm
+        # Preskačem npm update - često se kaći
         if command -v npm &>/dev/null; then
-            print_status "Ažuriranje npm..."
-            npm install -g npm@latest
+            print_success "npm je dostupan: $(npm --version)"
+            print_warning "⚠️  Preskačem npm update jer se često kaći"
+        else
+            print_warning "npm nije dostupan - nastavljam bez npm-a"
         fi
     else
         print_error "❌ FAIL: Node.js verzija je još uvek $FINAL_NODE_VERSION"
