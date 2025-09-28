@@ -391,23 +391,23 @@ Odaberi servis za prikaz logova...
 
             <!-- Links Tab -->
             <div id="links-content" class="tab-content hidden">
-                <h2>🔗 Quick Access Links</h2>
+                <h2>🔗 GLAVNI PANELI - SVE NA KLIK!</h2>
                 <div class="quick-links">
-                    <a href="#" class="quick-link" id="mumudvb-link" onclick="openMuMuDVBLink()">
-                        📺 MuMuDVB HTTP Interface<br>
-                        <small>Port 4242 - Stream management</small>
+                    <a href="#" class="quick-link" onclick="openMuMuDVBPanel()">
+                        📺 MuMuDVB PANEL<br>
+                        <small>Port 4242 - Novi tab</small>
                     </a>
-                    <a href="#" class="quick-link" id="oscam-link" onclick="openOSCamLink()">
-                        🔐 OSCam Web Interface<br>
-                        <small>Port 8888 - admin/admin</small>
+                    <a href="#" class="quick-link" onclick="openOSCamPanel()">
+                        🔐 OSCam PANEL<br>
+                        <small>Port 8888 - Novi tab</small>
                     </a>
                     <a href="#" class="quick-link" onclick="window.location.reload()">
-                        🔄 Reload Panel<br>
-                        <small>Refresh this control panel</small>
+                        � MASTER PANEL<br>
+                        <small>Port 8887 - Reload</small>
                     </a>
-                    <a href="#" class="quick-link" onclick="showTab('system')">
-                        ⚙️ System Status<br>
-                        <small>Server information</small>
+                    <a href="#" class="quick-link" onclick="openAllPanels()">
+                        🌐 SVA 3 PANELA<br>
+                        <small>Otvori sve odjednom!</small>
                     </a>
                 </div>
 
@@ -633,16 +633,27 @@ Odaberi servis za prikaz logova...
             }
         }
 
-        // Links
-        function openMuMuDVBLink() {
+        // Links - GLAVNI PANELI
+        function openMuMuDVBPanel() {
             const serverIP = window.location.hostname;
             window.open(`http://${serverIP}:4242`, '_blank');
         }
 
-        function openOSCamLink() {
+        function openOSCamPanel() {
             const serverIP = window.location.hostname;
             window.open(`http://${serverIP}:8888`, '_blank');
         }
+
+        function openAllPanels() {
+            const serverIP = window.location.hostname;
+            window.open(`http://${serverIP}:4242`, '_blank');
+            window.open(`http://${serverIP}:8888`, '_blank');
+            showAlert('SVA 3 PANELA OTVORENA! 🚀', 'success');
+        }
+
+        // Stari linkovi za kompatibilnost
+        function openMuMuDVBLink() { openMuMuDVBPanel(); }
+        function openOSCamLink() { openOSCamPanel(); }
 
         // Alerts
         function showAlert(message, type) {

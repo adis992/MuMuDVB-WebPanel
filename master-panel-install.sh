@@ -13,7 +13,16 @@ print_success() { echo -e "✅ $1"; }
 print_error() { echo -e "❌ $1"; exit 1; }
 
 # CLEANUP
-print_status "Kompletna cleanup..."
+prin# Start OSCam
+app.post('/api/oscam/start', (req, res) => {
+    exec('/usr/local/bin/oscam -b -c /var/etc/oscam', (error, stdout, stderr) => {
+        res.json({
+            success: !error,
+            message: error ? error.message : 'OSCam started',
+            output: stdout || stderr
+        });
+    });
+});Kompletna cleanup..."
 systemctl stop mumudvb-webpanel 2>/dev/null || true
 systemctl stop oscam 2>/dev/null || true
 pkill -f mumudvb 2>/dev/null || true
@@ -30,6 +39,12 @@ rm -f /etc/systemd/system/oscam.service 2>/dev/null || true
 # SYSTEM UPDATE
 print_status "System update..."
 apt update && apt upgrade -y
+
+# UFW DISABLE - kao što si rekao
+print_status "UFW disable..."
+ufw --force disable 2>/dev/null || true
+systemctl stop ufw 2>/dev/null || true
+systemctl disable ufw 2>/dev/null || true
 
 # OSNOVNI PAKETI
 print_status "Osnovni paketi..."
@@ -59,11 +74,42 @@ make install
 
 print_success "MuMuDVB instaliran: $(which mumudvb)"
 
-# OSCAM OSNOVNI (bez kompajliranja iz repo)
-print_status "OSCam osnovni setup..."
-if command -v apt &> /dev/null; then
-    # Pokušaj snap ili osnovni oscam
-    snap install oscam 2>/dev/null || apt install -y oscam 2>/dev/null || print_warning "OSCam skip - repo problemi"
+# OSCAM KOMPAJLIRANJE - SCHIMMELREITER SMOD
+print_status "OSCam Schimmelreiter smod kompajliranje..."
+cd /tmp
+rm -rf oscam-smod 2>/dev/null || true
+
+# Pokušaj više repo-a za OSCam
+OSCAM_REPOS=(
+    "https://github.com/Schimmelreiter/oscam-smod.git"
+    "https://github.com/oscam-emu/oscam-patched.git" 
+    "https://github.com/fairbird/oscam-smod.git"
+)
+
+OSCAM_COMPILED=false
+for repo in "${OSCAM_REPOS[@]}"; do
+    print_status "Pokušavam OSCam repo: $repo"
+    if git clone "$repo" oscam-smod 2>/dev/null; then
+        cd oscam-smod
+        if make allyesconfig CONF_DIR=/var/etc/oscam 2>/dev/null && make -j$(nproc) USE_LIBUSB=1 USE_LIBCRYPTO=1 USE_SSL=1 2>/dev/null; then
+            # Kopiraj u distribution folder kao što si rekao
+            mkdir -p distribution
+            cp oscam distribution/oscam
+            # Move u /usr/local/bin kao što radiš
+            cp distribution/oscam /usr/local/bin/oscam
+            chmod +x /usr/local/bin/oscam
+            OSCAM_COMPILED=true
+            print_success "OSCam kompajliran iz: $repo"
+            break
+        fi
+        cd /tmp
+        rm -rf oscam-smod 2>/dev/null || true
+    fi
+done
+
+if [ "$OSCAM_COMPILED" = false ]; then
+    print_status "OSCam repo problemi - koristim osnovni..."
+    apt install -y oscam 2>/dev/null || true
 fi
 
 # KREIRANJE DIREKTORIJUMA SA PERMISIJAMA
@@ -543,7 +589,7 @@ After=network.target
 [Service]
 Type=forking
 User=root
-ExecStart=/usr/bin/oscam -b -c /var/etc/oscam
+ExecStart=/usr/local/bin/oscam -b -c /var/etc/oscam
 PIDFile=/var/run/oscam.pid
 Restart=always
 RestartSec=10
