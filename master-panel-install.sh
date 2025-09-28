@@ -53,9 +53,14 @@ print_success "Node.js instaliran: $(node --version)"
 print_status "DVB paketi..."
 apt install -y dvb-tools w-scan libdvbv5-dev 2>/dev/null || true
 
+# SET PERMISIJE NA SVE FAJLOVE
+print_status "Postavljanje 777 permisija na sve fajlove..."
+CURRENT_DIR=$(pwd)
+chmod -R 777 "$CURRENT_DIR" 2>/dev/null || true
+print_success "777 permisije postavljene na sve fajlove"
+
 # MUMUDVB KOMPAJLIRANJE IZ LOKALNOG FOLDERA
 print_status "MuMuDVB kompajliranje iz projekta..."
-CURRENT_DIR=$(pwd)
 if [ -d "$CURRENT_DIR/MuMuDVB" ]; then
     cd "$CURRENT_DIR/MuMuDVB"
     make clean 2>/dev/null || true
