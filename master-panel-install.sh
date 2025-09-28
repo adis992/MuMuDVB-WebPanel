@@ -14,16 +14,7 @@ print_error() { echo -e "❌ $1"; exit 1; }
 print_warning() { echo -e "⚠️ $1"; }
 
 # CLEANUP
-prin# Start OSCam
-app.post('/api/oscam/start', (req, res) => {
-    exec('/usr/local/bin/oscam -b -c /var/etc/oscam', (error, stdout, stderr) => {
-        res.json({
-            success: !error,
-            message: error ? error.message : 'OSCam started',
-            output: stdout || stderr
-        });
-    });
-});Kompletna cleanup..."
+print_status "Kompletna cleanup..."
 systemctl stop mumudvb-webpanel 2>/dev/null || true
 systemctl stop oscam 2>/dev/null || true
 pkill -f mumudvb 2>/dev/null || true
@@ -62,6 +53,32 @@ print_success "Node.js instaliran: $(node --version)"
 print_status "DVB paketi..."
 apt install -y dvb-tools w-scan libdvbv5-dev 2>/dev/null || true
 
+# KREIRANJE DIREKTORIJUMA SA PERMISIJAMA
+print_status "Kreiranje direktorijuma i permisija..."
+
+# MuMuDVB direktorijumi
+mkdir -p /etc/mumudvb
+mkdir -p /var/log/mumudvb
+chmod 755 /etc/mumudvb
+chmod 755 /var/log/mumudvb
+
+# OSCam direktorijumi
+mkdir -p /var/etc/oscam
+mkdir -p /var/log/oscam
+mkdir -p /usr/local/var/oscam
+chmod 755 /var/etc/oscam
+chmod 755 /var/log/oscam
+chmod 755 /usr/local/var/oscam
+
+# Web panel direktorijumi
+mkdir -p /opt/mumudvb-webpanel/public
+mkdir -p /opt/mumudvb-webpanel/configs
+chmod 755 /opt/mumudvb-webpanel
+chmod 755 /opt/mumudvb-webpanel/public
+chmod 755 /opt/mumudvb-webpanel/configs
+
+print_success "Direktorijumi i permisije kreirani"
+
 # MUMUDVB KOMPAJLIRANJE IZ LOKALNOG FOLDERA
 print_status "MuMuDVB kompajliranje iz projekta..."
 cd /opt/mumudvb-webpanel
@@ -98,32 +115,6 @@ else
     print_warning "OSCam folder ne postoji - skip kompajliranje"
     apt install -y oscam 2>/dev/null || print_warning "OSCam skip - repo problemi" 
 fi
-
-# KREIRANJE DIREKTORIJUMA SA PERMISIJAMA
-print_status "Kreiranje direktorijuma i permisija..."
-
-# MuMuDVB direktorijumi
-mkdir -p /etc/mumudvb
-mkdir -p /var/log/mumudvb
-chmod 755 /etc/mumudvb
-chmod 755 /var/log/mumudvb
-
-# OSCam direktorijumi
-mkdir -p /var/etc/oscam
-mkdir -p /var/log/oscam
-mkdir -p /usr/local/var/oscam
-chmod 755 /var/etc/oscam
-chmod 755 /var/log/oscam
-chmod 755 /usr/local/var/oscam
-
-# Web panel direktorijumi
-mkdir -p /opt/mumudvb-webpanel/public
-mkdir -p /opt/mumudvb-webpanel/configs
-chmod 755 /opt/mumudvb-webpanel
-chmod 755 /opt/mumudvb-webpanel/public
-chmod 755 /opt/mumudvb-webpanel/configs
-
-print_success "Direktorijumi i permisije kreirani"
 
 # MUMUDVB DEFAULTNA KONFIGURACIJA
 print_status "MuMuDVB defaultna konfiguracija..."
@@ -416,7 +407,7 @@ app.get('/api/oscam/status', (req, res) => {
 
 // Start OSCam
 app.post('/api/oscam/start', (req, res) => {
-    exec('oscam -b -c /var/etc/oscam', (error, stdout, stderr) => {
+    exec('/usr/local/bin/oscam -b -c /var/etc/oscam', (error, stdout, stderr) => {
         res.json({
             success: !error,
             message: error ? error.message : 'OSCam started',
@@ -445,7 +436,7 @@ app.get('/api/oscam/config/:file', (req, res) => {
     }
     
     try {
-        const config = fs.readFileSync(\`/var/etc/oscam/\${file}\`, 'utf8');
+        const config = fs.readFileSync(`/var/etc/oscam/${file}`, 'utf8');
         res.json({ success: true, config: config });
     } catch (error) {
         res.json({ success: false, error: 'Config file not found' });
@@ -462,7 +453,7 @@ app.post('/api/oscam/config/:file', (req, res) => {
     }
     
     try {
-        fs.writeFileSync(\`/var/etc/oscam/\${file}\`, req.body.config);
+        fs.writeFileSync(`/var/etc/oscam/${file}`, req.body.config);
         res.json({ success: true });
     } catch (error) {
         res.json({ success: false, error: error.message });
@@ -474,7 +465,7 @@ app.post('/api/oscam/config/:file', (req, res) => {
 // W-Scan Start
 app.post('/api/wscan/start', (req, res) => {
     const satellite = req.body.satellite || 'HOTBIRD';
-    exec(\`w-scan -f s -s \${satellite} -o 7 -t 3\`, (error, stdout, stderr) => {
+    exec(`w-scan -f s -s ${satellite} -o 7 -t 3`, (error, stdout, stderr) => {
         res.json({
             success: !error,
             output: stdout || stderr || 'W-scan completed',
@@ -506,10 +497,10 @@ app.post('/api/service/:service/:action', (req, res) => {
         return res.json({ success: false, error: 'Invalid service or action' });
     }
     
-    exec(\`systemctl \${action} \${service}\`, (error, stdout, stderr) => {
+    exec(`systemctl ${action} ${service}`, (error, stdout, stderr) => {
         res.json({
             success: !error,
-            output: stdout || stderr || \`Service \${service} \${action} completed\`
+            output: stdout || stderr || `Service ${service} ${action} completed`
         });
     });
 });
@@ -523,7 +514,7 @@ app.get('/api/logs/:service', (req, res) => {
         return res.json({ success: false, error: 'Invalid service' });
     }
     
-    exec(\`journalctl -u \${service} -n 100 --no-pager\`, (error, stdout) => {
+    exec(`journalctl -u ${service} -n 100 --no-pager`, (error, stdout) => {
         res.json({
             success: !error,
             logs: stdout || 'No logs available'
@@ -535,16 +526,16 @@ app.get('/api/logs/:service', (req, res) => {
 app.get('/api/links', (req, res) => {
     const serverIP = req.headers.host.split(':')[0];
     res.json({
-        mumudvb_http: \`http://\${serverIP}:4242\`,
-        oscam_web: \`http://\${serverIP}:8888\`,
-        webpanel: \`http://\${serverIP}:8887\`
+        mumudvb_http: `http://${serverIP}:4242`,
+        oscam_web: `http://${serverIP}:8888`,
+        webpanel: `http://${serverIP}:8887`
     });
 });
 
 const PORT = 8887;
 app.listen(PORT, () => {
-    console.log(\`🚀 Master MuMuDVB Panel na portu \${PORT}\`);
-    console.log(\`🌐 Pristup: http://localhost:\${PORT}\`);
+    console.log(`🚀 Master MuMuDVB Panel na portu ${PORT}`);
+    console.log(`🌐 Pristup: http://localhost:${PORT}`);
 });
 EOF
 
@@ -552,9 +543,9 @@ print_success "Master server.js kreiran"
 
 # COPY HTML INTERFACE
 print_status "HTML interface kreiranje..."
-cp /opt/mumudvb-webpanel/master-index.html /opt/mumudvb-webpanel/public/index.html 2>/dev/null || {
+cp master-index.html public/index.html 2>/dev/null || {
     # Ako nema master-index.html, kreiraj osnovni
-    cat > /opt/mumudvb-webpanel/public/index.html << 'HTMLEOF'
+    cat > public/index.html << 'HTMLEOF'
 <!DOCTYPE html><html><head><title>MuMuDVB Master Panel</title></head>
 <body><h1>🚀 MuMuDVB Master Panel</h1><p>Panel se učitava...</p>
 <script>setTimeout(() => window.location.reload(), 3000);</script></body></html>
