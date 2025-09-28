@@ -101,16 +101,46 @@ if ! command -v w_scan &> /dev/null; then
     fi
 fi
 
-# Install Node.js 18.x LTS
+# Remove old Node.js if installed
+print_status "Removing old Node.js version..."
+sudo apt remove -y nodejs npm nodejs-doc || true
+sudo apt autoremove -y
+
+# Install Node.js 18.x LTS from NodeSource
 print_status "Installing Node.js 18.x LTS..."
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
 
-# Verify Node.js installation
-NODE_VERSION=$(node --version)
-NPM_VERSION=$(npm --version)
-print_success "Node.js installed: $NODE_VERSION"
-print_success "npm installed: $NPM_VERSION"
+# Verify Node.js and npm installation
+if command -v node &> /dev/null && command -v npm &> /dev/null; then
+    NODE_VERSION=$(node --version)
+    NPM_VERSION=$(npm --version)
+    print_success "Node.js installed: $NODE_VERSION"
+    print_success "npm installed: $NPM_VERSION"
+else
+    print_error "Node.js or npm installation failed!"
+    print_status "Trying alternative installation method..."
+    
+    # Alternative: install npm separately
+    sudo apt install -y npm
+    
+    # If still not working, install from snap
+    if ! command -v npm &> /dev/null; then
+        print_status "Installing Node.js via snap..."
+        sudo snap install node --classic
+    fi
+    
+    # Final verification
+    if command -v node &> /dev/null && command -v npm &> /dev/null; then
+        NODE_VERSION=$(node --version)
+        NPM_VERSION=$(npm --version)
+        print_success "Node.js installed (alternative method): $NODE_VERSION"
+        print_success "npm installed: $NPM_VERSION"
+    else
+        print_error "Failed to install Node.js and npm. Please install manually."
+        exit 1
+    fi
+fi
 
 # Install MuMuDVB dependencies
 print_status "Installing MuMuDVB compilation dependencies..."
