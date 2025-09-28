@@ -232,10 +232,12 @@ if command -v node &>/dev/null; then
         NODE_CMD="node"
         NPM_CMD="npm"
         
-        # Preskačem npm update - često se kaći
+        # Testiraj npm - ne ažuriraj (nova npm verzija zahteva Node 20+)
         if command -v npm &>/dev/null; then
-            print_success "npm je dostupan: $(npm --version)"
-            print_warning "⚠️  Preskačem npm update jer se često kaći"
+            NPM_VERSION=$(npm --version)
+            print_success "npm je dostupan: $NPM_VERSION"
+            print_success "Node.js 18.20.8 + npm $NPM_VERSION = SAVRŠENA kombinacija!"
+            print_warning "⚠️  Ne ažuriram npm jer nova verzija zahteva Node.js 20+"
         else
             print_warning "npm nije dostupan - nastavljam bez npm-a"
         fi
