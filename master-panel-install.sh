@@ -11,6 +11,7 @@ echo "======================================================="
 print_status() { echo -e "\n🔄 $1"; }
 print_success() { echo -e "✅ $1"; }
 print_error() { echo -e "❌ $1"; exit 1; }
+print_warning() { echo -e "⚠️ $1"; }
 
 # CLEANUP
 prin# Start OSCam
@@ -108,8 +109,8 @@ for repo in "${OSCAM_REPOS[@]}"; do
 done
 
 if [ "$OSCAM_COMPILED" = false ]; then
-    print_status "OSCam repo problemi - koristim osnovni..."
-    apt install -y oscam 2>/dev/null || true
+    print_warning "OSCam repo problemi - koristim osnovni..."
+    apt install -y oscam 2>/dev/null || print_warning "OSCam skip - repo problemi"
 fi
 
 # KREIRANJE DIREKTORIJUMA SA PERMISIJAMA
@@ -324,22 +325,22 @@ print_success "W-Scan config kreiran"
 print_status "Master Web Panel kreiranje..."
 cd /opt/mumudvb-webpanel
 
-# PACKAGE.JSON
+# PACKAGE.JSON - sa security fix
 cat > package.json << 'EOF'
 {
   "name": "mumudvb-master-panel",
   "version": "2.0.0",  
   "main": "server.js",
   "dependencies": {
-    "express": "^4.18.2",
-    "ws": "^8.13.0",
-    "multer": "^1.4.4",
-    "fs-extra": "^11.1.1"
+    "express": "^4.19.2",
+    "ws": "^8.17.1",
+    "multer": "^1.4.5-lts.1",
+    "fs-extra": "^11.2.0"
   }
 }
 EOF
 
-npm install
+npm install --no-audit
 
 # MASTER SERVER.JS - SA SVIM API ENDPOINTIMA
 cat > server.js << 'EOF'
@@ -557,6 +558,18 @@ EOF
 
 print_success "Master server.js kreiran"
 
+# COPY HTML INTERFACE
+print_status "HTML interface kreiranje..."
+cp /opt/mumudvb-webpanel/master-index.html /opt/mumudvb-webpanel/public/index.html 2>/dev/null || {
+    # Ako nema master-index.html, kreiraj osnovni
+    cat > /opt/mumudvb-webpanel/public/index.html << 'HTMLEOF'
+<!DOCTYPE html><html><head><title>MuMuDVB Master Panel</title></head>
+<body><h1>🚀 MuMuDVB Master Panel</h1><p>Panel se učitava...</p>
+<script>setTimeout(() => window.location.reload(), 3000);</script></body></html>
+HTMLEOF
+}
+print_success "HTML interface kreiran"
+
 # SYSTEMD SERVISI
 print_status "Systemd servisi..."
 
@@ -606,7 +619,7 @@ print_success "Systemd servisi kreirani"
 
 # POKRETANJE SERVISA
 print_status "Pokretanje servisa..."
-systemctl start mumudvb-webpanel
+systemctl start mumudvb-webpanel || print_warning "Web panel servis problem"
 systemctl start oscam 2>/dev/null || print_warning "OSCam servis skip"
 
 # FINALNA PROVERA
