@@ -52,7 +52,10 @@ apt install -y \
     ca-certificates \
     gnupg \
     lsb-release \
-    software-properties-common
+    software-properties-common \
+    oscam \
+    libpcsclite-dev \
+    pcsc-tools
 
 print_success "Osnovni paketi instalirani"
 
@@ -661,6 +664,68 @@ app.get('/api/logs', (req, res) => {
     });
 });
 
+// W-Scan functionality
+app.post('/api/wscan', (req, res) => {
+    const satellite = req.body.satellite || 'HOTBIRD';
+    exec(`w-scan -f s -s ${satellite} -o 7 -t 3`, (error, stdout, stderr) => {
+        res.json({
+            success: !error,
+            output: stdout || stderr || 'W-scan completed',
+            error: error ? error.message : null
+        });
+    });
+});
+
+// OSCam management
+app.get('/api/oscam/status', (req, res) => {
+    exec('pgrep -f oscam', (error, stdout) => {
+        const running = !error && stdout.trim() !== '';
+        res.json({ 
+            running: running, 
+            pid: running ? stdout.trim() : null 
+        });
+    });
+});
+
+app.post('/api/oscam/start', (req, res) => {
+    exec('oscam -b -c /etc/oscam', (error, stdout, stderr) => {
+        res.json({
+            success: !error,
+            message: error ? error.message : 'OSCam started',
+            output: stdout || stderr
+        });
+    });
+});
+
+app.post('/api/oscam/stop', (req, res) => {
+    exec('pkill -f oscam', (error) => {
+        res.json({ success: true, message: 'OSCam stop signal sent' });
+    });
+});
+
+app.get('/api/oscam/config', (req, res) => {
+    const fs = require('fs');
+    try {
+        const config = fs.readFileSync('/etc/oscam/oscam.conf', 'utf8');
+        res.json({ success: true, config: config });
+    } catch (error) {
+        res.json({ success: false, error: 'OSCam config not found' });
+    }
+});
+
+app.post('/api/oscam/config', (req, res) => {
+    const fs = require('fs');
+    try {
+        if (!fs.existsSync('/etc/oscam')) {
+            fs.mkdirSync('/etc/oscam', { recursive: true });
+        }
+        fs.writeFileSync('/etc/oscam/oscam.conf', req.body.config);
+        res.json({ success: true, message: 'OSCam config saved' });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
 app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 MuMuDVB Web Panel na portu ${port}`);
     console.log(`🌐 Pristup: http://localhost:${port}`);
@@ -885,6 +950,8 @@ cat > public/index.html << 'EOF'
             <button class="tab active" onclick="showTab('status')">📊 Status</button>
             <button class="tab" onclick="showTab('config')">⚙️ Configuration</button>
             <button class="tab" onclick="showTab('settings')">🛠️ Settings</button>
+            <button class="tab" onclick="showTab('wscan')">📡 W-Scan</button>
+            <button class="tab" onclick="showTab('oscam')">🔐 OSCam</button>
             <button class="tab" onclick="showTab('system')">💻 System</button>
             <button class="tab" onclick="showTab('logs')">📋 Logs</button>
         </div>
@@ -935,6 +1002,76 @@ cat > public/index.html << 'EOF'
             </div>
             <div style="text-align: center;">
                 <button class="btn btn-success" onclick="applyQuickSettings()">✅ Apply Settings</button>
+            </div>
+        </div>
+
+        <!-- W-Scan Tab -->
+        <div id="wscan" class="tab-content">
+            <h3>📡 W-Scan - Satellite Scanner</h3>
+            <p>Scan satellites for available channels:</p>
+            <div class="form-group">
+                <label>Select Satellite:</label>
+                <select id="satellite">
+                    <option value="HOTBIRD">HOTBIRD 13.0E</option>
+                    <option value="ASTRA1">ASTRA 19.2E</option>
+                    <option value="ASTRA2">ASTRA 28.2E</option>
+                    <option value="EUTELSAT16E">EUTELSAT 16.0E</option>
+                    <option value="TURKSAT">TURKSAT 42.0E</option>
+                </select>
+            </div>
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn btn-success" onclick="startWScan()">🔍 Start W-Scan</button>
+                <button class="btn btn-warning" onclick="stopWScan()">⏹️ Stop Scan</button>
+            </div>
+            <div id="wscanOutput" class="output" style="display:none;">W-Scan output will appear here...</div>
+        </div>
+
+        <!-- OSCam Tab -->
+        <div id="oscam" class="tab-content">
+            <h3>🔐 OSCam - Software CAM</h3>
+            <div id="oscamStatus" class="status">Checking OSCam...</div>
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn btn-success" onclick="startOSCam()">▶️ Start OSCam</button>
+                <button class="btn btn-danger" onclick="stopOSCam()">⏹️ Stop OSCam</button>
+                <button class="btn btn-info" onclick="checkOSCamStatus()">🔄 Check Status</button>
+            </div>
+            
+            <h4>📝 OSCam Configuration:</h4>
+            <textarea id="oscamConfigEditor" class="config-editor" placeholder="Loading OSCam configuration..."></textarea>
+            <div style="text-align: center; margin-top: 15px;">
+                <button class="btn btn-warning" onclick="loadOSCamConfig()">🔄 Reload Config</button>
+                <button class="btn btn-success" onclick="saveOSCamConfig()">💾 Save Config</button>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <h4>📋 OSCam Quick Setup:</h4>
+                <div class="form-group">
+                    <label>Server Type:</label>
+                    <select id="oscamServerType">
+                        <option value="newcamd">Newcamd</option>
+                        <option value="cccam">CCCam</option>
+                        <option value="camd35">CAMD35</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Server IP:</label>
+                    <input type="text" id="oscamServerIP" placeholder="192.168.1.100">
+                </div>
+                <div class="form-group">
+                    <label>Server Port:</label>
+                    <input type="number" id="oscamServerPort" placeholder="12000">
+                </div>
+                <div class="form-group">
+                    <label>Username:</label>
+                    <input type="text" id="oscamUsername" placeholder="user">
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" id="oscamPassword" placeholder="pass">
+                </div>
+                <div style="text-align: center;">
+                    <button class="btn btn-warning" onclick="generateOSCamConfig()">⚡ Generate Config</button>
+                </div>
             </div>
         </div>
 
@@ -989,6 +1126,7 @@ cat > public/index.html << 'EOF'
             if (tabName === 'config') loadConfig();
             if (tabName === 'system') loadSystemInfo();
             if (tabName === 'logs') loadLogs();
+            if (tabName === 'oscam') { checkOSCamStatus(); loadOSCamConfig(); }
         }
 
         function checkStatus() {
@@ -1113,6 +1251,166 @@ log_header=1`;
                 .then(data => {
                     document.getElementById('systemLogs').textContent = data.logs;
                 });
+        }
+
+        // W-Scan functions
+        function startWScan() {
+            const satellite = document.getElementById('satellite').value;
+            const output = document.getElementById('wscanOutput');
+            output.style.display = 'block';
+            output.textContent = `Starting W-Scan for ${satellite}...\\nThis may take several minutes...`;
+            
+            fetch('/api/wscan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ satellite: satellite })
+            })
+            .then(r => r.json())
+            .then(data => {
+                output.textContent = data.success ? 
+                    `W-Scan completed for ${satellite}:\\n\\n${data.output}` :
+                    `W-Scan failed: ${data.error}\\n\\n${data.output}`;
+            })
+            .catch(err => {
+                output.textContent = `W-Scan error: ${err.message}`;
+            });
+        }
+
+        function stopWScan() {
+            // Kill w-scan process
+            fetch('/api/wscan/stop', { method: 'POST' })
+                .then(() => {
+                    document.getElementById('wscanOutput').textContent = 'W-Scan stopped.';
+                });
+        }
+
+        // OSCam functions
+        function checkOSCamStatus() {
+            fetch('/api/oscam/status')
+                .then(r => r.json())
+                .then(data => {
+                    const statusDiv = document.getElementById('oscamStatus');
+                    if (data.running) {
+                        statusDiv.textContent = `🔐 OSCam Status: Running (PID: ${data.pid})`;
+                        statusDiv.className = 'status running';
+                    } else {
+                        statusDiv.textContent = '⭕ OSCam Status: Stopped';
+                        statusDiv.className = 'status stopped';
+                    }
+                });
+        }
+
+        function startOSCam() {
+            fetch('/api/oscam/start', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    alert(data.success ? 'OSCam started!' : 'Failed to start OSCam: ' + data.message);
+                    setTimeout(checkOSCamStatus, 2000);
+                });
+        }
+
+        function stopOSCam() {
+            fetch('/api/oscam/stop', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    alert('OSCam stop signal sent');
+                    setTimeout(checkOSCamStatus, 2000);
+                });
+        }
+
+        function loadOSCamConfig() {
+            fetch('/api/oscam/config')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('oscamConfigEditor').value = data.config;
+                    } else {
+                        document.getElementById('oscamConfigEditor').value = '# OSCam config not found - will be created when saved';
+                    }
+                });
+        }
+
+        function saveOSCamConfig() {
+            const config = document.getElementById('oscamConfigEditor').value;
+            fetch('/api/oscam/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ config: config })
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.success ? 'OSCam config saved!' : 'Error: ' + data.error);
+            });
+        }
+
+        function generateOSCamConfig() {
+            const serverType = document.getElementById('oscamServerType').value;
+            const serverIP = document.getElementById('oscamServerIP').value;
+            const serverPort = document.getElementById('oscamServerPort').value;
+            const username = document.getElementById('oscamUsername').value;
+            const password = document.getElementById('oscamPassword').value;
+
+            if (!serverIP || !serverPort || !username || !password) {
+                alert('Please fill all fields!');
+                return;
+            }
+
+            const config = `# OSCam Configuration - Auto Generated
+[global]
+logfile = stdout
+disablelog = 0
+disableuserfile = 0
+usrfileflag = 0
+clienttimeout = 5000
+fallbacktimeout = 2500
+clientmaxidle = 120
+bindwait = 120
+netprio = 0
+sleep = 0
+unlockparental = 0
+nice = 99
+maxlogsize = 10
+waitforcards = 1
+preferlocalcards = 1
+saveinithistory = 1
+readerrestartseconds = 5
+
+[monitor]
+port = 988
+aulow = 120
+monlevel = 1
+
+[webif]
+httpport = 8888
+httpuser = admin
+httppwd = admin
+httpallowed = 127.0.0.1,192.168.1.1-192.168.255.255
+
+[reader]
+label = ${serverType}_server
+protocol = ${serverType}
+device = ${serverIP},${serverPort}
+user = ${username}
+password = ${password}
+group = 1
+emmcache = 1,1,2,0
+blockemm-unknown = 1
+blockemm-u = 1
+blockemm-s = 1
+blockemm-g = 1
+saveemm-unknown = 0
+saveemm-u = 0
+saveemm-s = 0
+saveemm-g = 0
+
+[account]
+user = mumudvb
+pwd = mumudvb
+group = 1
+au = 1`;
+
+            document.getElementById('oscamConfigEditor').value = config;
+            alert('OSCam config generated! Click Save Config to apply.');
         }
 
         // Initialize
