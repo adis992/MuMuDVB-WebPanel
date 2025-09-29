@@ -842,20 +842,18 @@ node -c /opt/mumudvb-webpanel/server.js && print_success "✅ Syntax OK" || {
 mkdir -p /opt/mumudvb-webpanel/uploads
 print_success "Uploads direktorijum kreiran"
 
-# COPY HTML INTERFACE
+# COPY HTML INTERFACE - UVEK KORISTI MASTER-INDEX.HTML!
 print_status "HTML interface kreiranje..."
 if [ -f "$CURRENT_DIR/web_panel/master-index.html" ]; then
     cp "$CURRENT_DIR/web_panel/master-index.html" /opt/mumudvb-webpanel/public/index.html
-    print_success "master-index.html kopiran"
+    print_success "✅ Master-index.html kopiran - FULL VERZIJA!"
+elif [ -f "$CURRENT_DIR/master-index.html" ]; then
+    cp "$CURRENT_DIR/master-index.html" /opt/mumudvb-webpanel/public/index.html
+    print_success "✅ Master-index.html kopiran iz root foldera!"
 else
-    # Ako nema master-index.html, kreiraj osnovni
-    cat > /opt/mumudvb-webpanel/public/index.html << 'HTMLEOF'
-<!DOCTYPE html><html><head><title>MuMuDVB Master Panel</title></head>
-<body><h1>🚀 MuMuDVB Master Panel</h1><p>Panel se učitava...</p>
-<script>setTimeout(() => window.location.reload(), 3000);</script></body></html>
-HTMLEOF
+    print_error "❌ MASTER-INDEX.HTML NE POSTOJI! Mora postojati web_panel/master-index.html!"
 fi
-print_success "HTML interface kreiran"
+print_success "Master HTML interface kreiran - BEZ FALLBACK-a!"
 
 # SYSTEMD SERVISI
 print_status "Systemd servisi..."
