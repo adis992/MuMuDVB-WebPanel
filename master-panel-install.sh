@@ -704,11 +704,10 @@ app.get('/api/cccam/status', (req, res) => {
 app.post('/api/wscan/start', (req, res) => {
     const satellite = req.body.satellite || 'HOTBIRD';
     exec('w-scan -f s -s ' + satellite + ' -o 7 -t 3', (error, stdout, stderr) => {
-            res.json({
-                success: !error,
-                output: stdout || stderr || 'W-scan completed',
-                satellite: satellite
-            });
+        res.json({
+            success: !error,
+            output: stdout || stderr || 'W-scan completed',
+            satellite: satellite
         });
     });
 });
