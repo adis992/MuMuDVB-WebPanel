@@ -213,6 +213,8 @@ chmod 755 /var/log/oscam
 chmod 755 /usr/local/var/oscam
 
 # Web panel direktorijumi
+mkdir -p /var/run/mumudvb
+chmod 755 /var/run/mumudvb
 mkdir -p /opt/mumudvb-webpanel/public
 mkdir -p /opt/mumudvb-webpanel/configs
 chmod 755 /opt/mumudvb-webpanel
@@ -225,27 +227,31 @@ print_success "Direktorijumi i permisije kreirani"
 print_status "MuMuDVB defaultna konfiguracija..."
 cat > /etc/mumudvb/mumudvb.conf << 'EOF'
 # MuMuDVB Configuration - RADNA VERZIJA
-# DVB-S/S2 Setup za HOTBIRD 13.0E
+# DVB-S/S2 Setup za HOTBIRD 19.2E
 
 # DVB parametri
 adapter=0
-freq=12054
+tuner=0
+freq=10832
 pol=h
-srate=27500
+srate=22000
 delivery_system=DVBS2
+modulation=8PSK
+
 
 # Multicast konfiguracija
 multicast=1
-multicast_iface=eth0
-ip_multicast=239.100.0.0
+autoconf_ip4=239.100.%card.%number
 port_multicast=1234
 ttl_multicast=2
+multicast_auto_join=1
 
 # Autoconfiguration - automatski kanali
 autoconfiguration=full
 autoconf_radios=1
 autoconf_scrambled=1
-autoconf_pid_update=1
+
+
 
 # SAP announces
 sap=1
@@ -256,7 +262,7 @@ sap_uri=sap://239.255.255.255
 unicast=1
 ip_http=0.0.0.0
 port_http=4242
-unicast_max_clients=20
+unicast_max_clients=200
 
 # Logging
 log_type=console
@@ -271,6 +277,7 @@ scam_support=1
 # Rewrite za bolje compatibility
 rewrite_pat=1
 rewrite_sdt=1
+sort_eit=1
 EOF
 
 chmod 644 /etc/mumudvb/mumudvb.conf
@@ -311,8 +318,8 @@ nocrypt = 127.0.0.1,192.168.0.0-192.168.255.255
 
 [webif]
 httpport = 8888
-httpuser = admin
-httppwd = admin
+httpuser = 
+httppwd = 
 httphelplang = en
 httprefresh = 30
 httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255
@@ -351,6 +358,22 @@ cat > /var/etc/oscam/oscam.server << 'EOF'
 # OSCam server configuration
 # Add your card readers here
 
+# CCcam reader - dhoom.org server
+[reader]
+label = sead1302_dhoom
+protocol = cccam
+device = dhoom.org,34000
+user = sead1302
+password = sead1302
+cccversion = 2.3.2
+group = 1
+disablecrccws = 1
+inactivitytimeout = 1
+reconnecttimeout = 30
+lb_weight = 100
+cccmaxhops = 10
+ccckeepalive = 1
+
 # Example local card reader (uncomment and configure)
 # [reader]
 # label = local-card
@@ -376,7 +399,39 @@ EOF
 chmod 644 /var/etc/oscam/oscam.conf
 chmod 644 /var/etc/oscam/oscam.user  
 chmod 644 /var/etc/oscam/oscam.server
-print_success "OSCam config kreiran"
+
+# CCcam.cfg za standardni CCcam (alternativa za OSCam)
+print_status "Kreiranje CCcam.cfg alternativa..."
+mkdir -p /var/etc/cccam
+cat > /var/etc/cccam/CCcam.cfg << 'EOF'
+# CCcam Configuration File
+#
+# Server configuration
+SERVER LISTEN PORT : 12000
+ALLOW TELNETINFO: yes
+ALLOW WEBINFO: yes
+WEBINFO LISTEN PORT : 16001
+WEBINFO USERNAME : admin
+WEBINFO PASSWORD : admin
+TELNETINFO LISTEN PORT : 16000
+TELNETINFO USERNAME : admin
+TELNETINFO PASSWORD : admin
+
+# CCcam server - dhoom.org
+C: dhoom.org 34000 sead1302 sead1302 
+
+# Additional server configuration
+DEBUG : yes
+MINI OSD : yes
+OSD PORT : 8888
+ZAP OSD TIME : 3
+SHOW TIMING : yes
+CCAM DEBUG : yes
+SOFTKEY FILE : /var/keys/SoftCam.Key
+EOF
+
+chmod 644 /var/etc/cccam/CCcam.cfg
+print_success "OSCam config i CCcam alternativa kreirani"
 
 # W-SCAN SAMPLE CONFIG
 print_status "W-Scan sample konfiguracija..."
@@ -586,6 +641,60 @@ app.post('/api/oscam/config/:file', (req, res) => {
     }
 });
 
+// ============= CCCAM API =============
+
+// Start CCcam
+app.post('/api/cccam/start', (req, res) => {
+    exec('systemctl start cccam', (error, stdout, stderr) => {
+        res.json({
+            success: !error,
+            message: error ? error.message : 'CCcam started',
+            output: stdout || stderr
+        });
+    });
+});
+
+// Stop CCcam
+app.post('/api/cccam/stop', (req, res) => {
+    exec('systemctl stop cccam', (error) => {
+        res.json({
+            success: true,
+            message: 'CCcam stop signal sent'
+        });
+    });
+});
+
+// CCcam Config Load
+app.get('/api/cccam/config', (req, res) => {
+    try {
+        const config = fs.readFileSync('/var/etc/cccam/CCcam.cfg', 'utf8');
+        res.json({ success: true, config: config });
+    } catch (error) {
+        res.json({ success: false, error: 'CCcam.cfg not found' });
+    }
+});
+
+// CCcam Config Save
+app.post('/api/cccam/config', (req, res) => {
+    try {
+        fs.writeFileSync('/var/etc/cccam/CCcam.cfg', req.body.config);
+        res.json({ success: true });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+// CCcam Status
+app.get('/api/cccam/status', (req, res) => {
+    exec('systemctl is-active cccam', (error, stdout) => {
+        res.json({
+            success: true,
+            active: stdout.trim() === 'active',
+            status: stdout.trim()
+        });
+    });
+});
+
 // ============= W-SCAN API =============
 
 // W-Scan Start
@@ -754,9 +863,29 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
+# CCcam service alternativa (ako treba standardni CCcam umesto OSCam)
+cat > /etc/systemd/system/cccam.service << 'EOF'
+[Unit]
+Description=CCcam - Card sharing server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/cccam -C /var/etc/cccam/CCcam.cfg
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 systemctl daemon-reload
 systemctl enable mumudvb-webpanel
 systemctl enable oscam 2>/dev/null || true
+# systemctl enable cccam 2>/dev/null || true  # Uncomment if using CCcam instead of OSCam
 
 print_success "Systemd servisi kreirani"
 

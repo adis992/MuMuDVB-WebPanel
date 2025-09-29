@@ -5,7 +5,29 @@ echo "================================================"
 
 # OSNOVNE FUNKCIJE
 print_status() { echo -e "\n🔄 $1"; }
-print_success() { echo -e "✅ $1"; }
+print_success() { e# W-Scan
+app.post('/api/wscan/start', (req, res) => {
+    const satellite = req.body.satellite || 'S19E2';
+    const outputFile = '/opt/mumudvb-webpanel/configs/channels.conf';
+    
+    exec('which w-scan', (checkError) => {
+        if (checkError) {
+            return res.json({ success: false, error: 'w-scan not installed' });
+        }
+        
+        // Create configs directory if not exists
+        exec('mkdir -p /opt/mumudvb-webpanel/configs', () => {
+            const wscanCmd = 'w-scan -f s -s ' + satellite + ' -o 7 -t 3 > ' + outputFile;
+            exec(wscanCmd, (error, stdout, stderr) => {
+                res.json({ 
+                    success: !error, 
+                    output: error ? stderr : 'Channels saved to: ' + outputFile,
+                    file: outputFile
+                });
+            });
+        });
+    });
+});"; }
 print_error() { echo -e "❌ $1"; exit 1; }
 print_warning() { echo -e "⚠️ $1"; }
 
@@ -80,19 +102,49 @@ chmod 777 /etc/mumudvb /var/etc/oscam /opt/mumudvb-webpanel -R
 # 7. CONFIGS
 print_status "Creating configs..."
 cat > /etc/mumudvb/mumudvb.conf << 'EOF'
+# MuMuDVB Configuration - ASTRA 19.2E
 adapter=0
-freq=12054
+freq=10832
 pol=h
-srate=27500
-delivery_system=DVBS2
+srate=22000
+fec=5/6
+delivery_system=DVBS
+
+# Multicast konfiguracija
 multicast=1
+multicast_iface=eth0
 ip_multicast=239.100.0.0
 port_multicast=1234
-unicast=1
-port_http=4242
+ttl_multicast=2
+
+# Autoconfiguration - automatski kanali
 autoconfiguration=full
+autoconf_radios=1
+autoconf_scrambled=1
+autoconf_pid_update=1
+
+# SAP announces
+sap=1
+sap_group=239.255.255.255
+
+# HTTP Unicast
+unicast=1
+ip_http=0.0.0.0
+port_http=4242
+unicast_max_clients=20
+
+# Logging
+log_type=console
+log_header=1
+show_traffic=1
+
+# CAM/SCAM support
 cam_support=1
 scam_support=1
+
+# Rewrite za compatibility
+rewrite_pat=1
+rewrite_sdt=1
 EOF
 
 cat > /var/etc/oscam/oscam.conf << 'EOF'
@@ -208,6 +260,27 @@ app.listen(PORT, () => {
 });
 EOF
 
+# W-SCAN BUILD FROM SOURCE
+print_status "W-scan build from source..."
+cd "$CURRENT_DIR"
+if [ ! -d "w_scan" ]; then
+    git clone https://github.com/tbsdtv/w_scan.git w_scan || print_warning "W-scan git failed"
+fi
+if [ -d "w_scan" ]; then
+    cd w_scan
+    chmod 777 * -R 2>/dev/null || true
+    make clean 2>/dev/null || true
+    ./configure 2>/dev/null || autoreconf -i -f && ./configure
+    make -j$(nproc)
+    cp w_scan /usr/local/bin/w-scan 2>/dev/null || cp w-scan /usr/local/bin/w-scan
+    chmod 777 /usr/local/bin/w-scan
+    print_success "W-scan built and installed"
+else
+    print_warning "Using system w-scan"
+fi
+
+cd /opt/mumudvb-webpanel
+
 # Install npm packages
 npm install
 
@@ -232,25 +305,47 @@ cat > public/index.html << 'EOF'
 <h2>🔐 OSCam Control</h2>
 <button class="btn btn-start" onclick="startOSCam()">▶️ Start OSCam</button>
 <button class="btn btn-stop" onclick="stopOSCam()">⏹️ Stop OSCam</button>
-<a href="http://' + window.location.hostname + ':8888" target="_blank" class="btn btn-scan">🌐 OSCam Web</a>
+<button class="btn btn-scan" onclick="openOSCamWeb()">🌐 OSCam Web</button>
 
-<h2>📡 W-Scan</h2>
-<select id="satellite">
+<h2>📡 W-Scan Pretraga Kanala</h2>
+<div style="margin:10px 0;">
+<label>Satelit:</label>
+<select id="satellite" style="padding:5px;margin:5px;">
 <option value="S19E2">ASTRA 19.2°E</option>
 <option value="S13E">HOTBIRD 13.0°E</option>
 <option value="S1W">THOR 1.0°W</option>
 </select>
 <button class="btn btn-scan" onclick="startWScan()">🔍 Start Scan</button>
+</div>
 
-<div id="output" style="background:#f8f9fa;padding:15px;margin-top:20px;border-radius:5px;white-space:pre-wrap;font-family:monospace;max-height:300px;overflow-y:auto;"></div>
+<div id="output" style="background:#f8f9fa;padding:15px;margin-top:20px;border-radius:5px;white-space:pre-wrap;font-family:monospace;max-height:400px;overflow-y:auto;border:1px solid #ddd;"></div>
 
-<h2>🌐 Quick Links</h2>
-<a href="http://' + window.location.hostname + ':4242" target="_blank" class="btn btn-scan">📺 MuMuDVB HTTP</a>
-<a href="http://' + window.location.hostname + ':8888" target="_blank" class="btn btn-scan">🔐 OSCam Web</a>
+<h2>🌐 Pristup Linkovi</h2>
+<div style="margin:10px 0;">
+<button class="btn btn-scan" onclick="openMuMuDVBWeb()">📺 MuMuDVB HTTP</button>
+<button class="btn btn-scan" onclick="openOSCamWeb()">🔐 OSCam Web</button>
+<button class="btn btn-scan" onclick="window.open('http://'+getServerIP()+':8887','_blank')">� Master Panel</button>
+</div>
 </div>
 
 <script>
-function log(msg) { document.getElementById("output").textContent += new Date().toLocaleTimeString() + " - " + msg + "\n"; }
+function log(msg) { 
+    const output = document.getElementById("output");
+    output.textContent += new Date().toLocaleTimeString() + " - " + msg + "\n"; 
+    output.scrollTop = output.scrollHeight;
+}
+
+function getServerIP() {
+    return window.location.hostname;
+}
+
+function openMuMuDVBWeb() {
+    window.open("http://" + getServerIP() + ":4242", "_blank");
+}
+
+function openOSCamWeb() {
+    window.open("http://" + getServerIP() + ":8888", "_blank");
+}
 
 function startMuMuDVB() {
     log("Starting MuMuDVB...");

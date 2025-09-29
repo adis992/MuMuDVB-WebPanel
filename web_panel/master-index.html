@@ -247,6 +247,11 @@
                 <div id="oscam-pid"></div>
             </div>
             <div class="status-item">
+                <span class="status-indicator status-stopped" id="cccam-status"></span>
+                <strong>CCcam</strong>
+                <div id="cccam-pid"></div>
+            </div>
+            <div class="status-item">
                 <span class="status-indicator status-running"></span>
                 <strong>Web Panel</strong>
                 <div>Port 8887</div>
@@ -258,6 +263,7 @@
             <button class="tab active" onclick="showTab('dashboard')">📊 Dashboard</button>
             <button class="tab" onclick="showTab('mumudvb')">📺 MuMuDVB</button>
             <button class="tab" onclick="showTab('oscam')">🔐 OSCam</button>
+            <button class="tab" onclick="showTab('cccam')">📡 CCcam</button>
             <button class="tab" onclick="showTab('wscan')">🔍 W-Scan</button>
             <button class="tab" onclick="showTab('system')">⚙️ System</button>
             <button class="tab" onclick="showTab('logs')">📋 Logs</button>
@@ -288,6 +294,15 @@
                         <button class="btn btn-stop" onclick="controlService('oscam', 'stop')">⏹️ Stop</button>
                         <button class="btn btn-config" onclick="showTab('oscam')">⚙️ Config</button>
                         <button class="btn btn-link" onclick="openOSCamLink()">🌐 Web Interface</button>
+                    </div>
+
+                    <div class="service-panel">
+                        <h3>📡 CCcam Server</h3>
+                        <p>Standardni CCcam server (alternativa za OSCam)</p>
+                        <button class="btn btn-start" onclick="controlService('cccam', 'start')">▶️ Start</button>
+                        <button class="btn btn-stop" onclick="controlService('cccam', 'stop')">⏹️ Stop</button>
+                        <button class="btn btn-config" onclick="showTab('cccam')">⚙️ Config</button>
+                        <button class="btn btn-link" onclick="openCCcamLink()">🌐 Web Interface</button>
                     </div>
                 </div>
 
@@ -338,6 +353,27 @@
                     <button class="btn btn-config" onclick="saveOSCamConfig()">💾 Save</button>
                 </div>
                 <textarea id="oscam-config" class="config-editor" placeholder="OSCam konfiguracija će biti učitana ovde..."></textarea>
+            </div>
+
+            <!-- CCcam Tab -->
+            <div id="cccam-content" class="tab-content hidden">
+                <h2>📡 CCcam Konfiguracija</h2>
+                <div class="control-buttons">
+                    <button class="btn btn-start" onclick="controlService('cccam', 'start')">▶️ Start CCcam</button>
+                    <button class="btn btn-stop" onclick="controlService('cccam', 'stop')">⏹️ Stop CCcam</button>
+                    <button class="btn btn-config" onclick="loadCCcamConfig()">🔄 Load Config</button>
+                    <button class="btn btn-config" onclick="saveCCcamConfig()">💾 Save Config</button>
+                    <button class="btn btn-link" onclick="openCCcamLink()">🌐 Web Interface</button>
+                </div>
+                <textarea id="cccam-config" class="config-editor" placeholder="CCcam.cfg konfiguracija će biti učitana ovde..."></textarea>
+                
+                <div class="info-box" style="margin-top: 20px;">
+                    <h3>📌 CCcam Server Setup - dhoom.org:</h3>
+                    <div style="background: #f8f8f8; padding: 15px; border-radius: 5px; font-family: monospace; margin-top: 10px;">
+                        C: dhoom.org 34000 sead1302 sead1302
+                    </div>
+                    <p style="margin-top: 10px;"><strong>Napomena:</strong> CCcam server je alternativa za OSCam. Koristi ga ako trebaš standardni CCcam format.</p>
+                </div>
             </div>
 
             <!-- W-Scan Tab -->
@@ -401,6 +437,10 @@ Odaberi servis za prikaz logova...
                         🔐 OSCam PANEL<br>
                         <small>Port 8888 - Novi tab</small>
                     </a>
+                    <a href="#" class="quick-link" onclick="openCCcamLink()">
+                        📡 CCcam PANEL<br>
+                        <small>Port 16001 - Novi tab</small>
+                    </a>
                     <a href="#" class="quick-link" onclick="window.location.reload()">
                         � MASTER PANEL<br>
                         <small>Port 8887 - Reload</small>
@@ -417,6 +457,7 @@ Odaberi servis za prikaz logova...
                         <li><strong>Master Panel:</strong> http://your-server:8887 (ovaj panel)</li>
                         <li><strong>MuMuDVB HTTP:</strong> http://your-server:4242 (kad je aktivan)</li>
                         <li><strong>OSCam Web:</strong> http://your-server:8888 (kad je aktivan)</li>
+                        <li><strong>CCcam Web:</strong> http://your-server:16001 (kad je aktivan)</li>
                     </ul>
                 </div>
             </div>
@@ -462,6 +503,11 @@ Odaberi servis za prikaz logova...
                 const oscamResponse = await fetch('/api/oscam/status');
                 const oscamData = await oscamResponse.json();
                 updateStatusIndicator('oscam', oscamData.running, oscamData.pid);
+
+                // CCcam status
+                const cccamResponse = await fetch('/api/cccam/status');
+                const cccamData = await cccamResponse.json();
+                updateStatusIndicator('cccam', cccamData.active, 'N/A');
 
             } catch (error) {
                 console.error('Status update error:', error);
@@ -649,6 +695,48 @@ Odaberi servis za prikaz logova...
             window.open(`http://${serverIP}:4242`, '_blank');
             window.open(`http://${serverIP}:8888`, '_blank');
             showAlert('SVA 3 PANELA OTVORENA! 🚀', 'success');
+        }
+
+        // CCcam config management
+        async function loadCCcamConfig() {
+            try {
+                const response = await fetch('/api/cccam/config');
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('cccam-config').value = data.config;
+                    showAlert('CCcam config loaded', 'success');
+                } else {
+                    showAlert('Failed to load CCcam config: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error loading CCcam config: ' + error.message, 'error');
+            }
+        }
+
+        async function saveCCcamConfig() {
+            try {
+                const config = document.getElementById('cccam-config').value;
+                const response = await fetch('/api/cccam/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config: config })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('CCcam config saved', 'success');
+                } else {
+                    showAlert('Failed to save CCcam config: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error saving CCcam config: ' + error.message, 'error');
+            }
+        }
+
+        function openCCcamLink() {
+            const serverIP = window.location.hostname;
+            window.open(`http://${serverIP}:16001`, '_blank');
         }
 
         // Stari linkovi za kompatibilnost
