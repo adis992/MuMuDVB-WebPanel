@@ -289,7 +289,7 @@ modulation=8PSK
 # Multicast konfiguracija
 multicast=1
 autoconf_ip4=239.100.%card.%number
-port_multicast=1234
+common_port=1234
 ttl_multicast=2
 multicast_auto_join=1
 
@@ -324,7 +324,7 @@ scam_support=1
 # Rewrite za bolje compatibility
 rewrite_pat=1
 rewrite_sdt=1
-sort_eit=1
+rewrite_eit sort_eit=1
 EOF
 
 chmod 777 /etc/mumudvb/mumudvb.conf
