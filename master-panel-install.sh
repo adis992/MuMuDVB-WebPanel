@@ -3,11 +3,21 @@
 # MASTER WEB PANEL INSTALLER - KOMPLETNO UPRAVLJANJE SVIME!
 # PERMISIJE, KONFIGURACIJE, SERVISI - SVE U JEDNOM PANELU!
 
+# Funkcije PRVO!
+print_status() { echo -e "\n🔄 $1"; }
+print_success() { echo -e "✅ $1"; }
+print_error() { echo -e "❌ $1"; exit 1; }
+print_warning() { echo -e "⚠️ $1"; }
+
+echo "🚀 MASTER WEB PANEL INSTALLER - KOMPLETNO UPRAVLJANJE!"
+echo "======================================================="
+
+set -e
+
 # FORCE 777 ODMAH - PRIJE SVEGA OSTALOG!
 chmod 777 "$0" 2>/dev/null || true
 chmod 777 * 2>/dev/null || true
 
-set -e
 print_status "Auto chmod 777 setup..."
 CURRENT_DIR=$(pwd)
 chmod 777 "$CURRENT_DIR"/* 2>/dev/null || true
@@ -18,14 +28,7 @@ print_status "Brisanje stare instalacije..."
 rm -rf /opt/mumudvb-webpanel 2>/dev/null || true
 systemctl stop mumudvb-webpanel 2>/dev/null || true
 systemctl stop oscam 2>/dev/null || true
-print_success "Cleanup done"o "🚀 MASTER WEB PANEL INSTALLER - KOMPLETNO UPRAVLJANJE!"
-echo "======================================================="
-
-# Funkcije
-print_status() { echo -e "\n🔄 $1"; }
-print_success() { echo -e "✅ $1"; }
-print_error() { echo -e "❌ $1"; exit 1; }
-print_warning() { echo -e "⚠️ $1"; }
+print_success "Cleanup done"
 
 # CLEANUP
 print_status "Kompletna cleanup..."
