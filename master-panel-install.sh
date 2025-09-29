@@ -33,13 +33,30 @@ print_status "Dependency instalacija..."
 apt update
 apt install -y build-essential git cmake mercurial subversion autotools-dev autoconf libtool pkg-config
 apt install -y libdvbcsa-dev libssl-dev libpcsclite-dev
-apt install -y dvb-tools libdvbv5-dev 2>/dev/null || {
-    print_warning "w-scan apt install failed, trying manual install..."
+apt install -y dvb-tools libdvbv5-dev w-scan 2>/dev/null || {
+    print_warning "w-scan apt install failed, trying alternatives..."
+    add-apt-repository universe -y 2>/dev/null || true
     apt update
-    apt install -y w-scan || print_warning "w-scan install problem - možda nije dostupan u ovom repo"
+    apt install -y w-scan || {
+        print_warning "Standard w-scan failed, trying build from source..."
+        cd /tmp
+        wget http://wirbel.htpc-forum.de/w_scan/w_scan-20170107.tar.bz2 2>/dev/null || true
+        tar -xf w_scan-20170107.tar.bz2 2>/dev/null || true
+        cd w_scan-20170107 2>/dev/null && make && cp w_scan /usr/local/bin/w-scan && chmod 777 /usr/local/bin/w-scan || true
+    }
 }
 
 print_success "Dependencies instalirane"
+
+# DVB ADAPTER CHECK
+print_status "Provjera DVB adaptera..."
+DVB_COUNT=$(ls /dev/dvb* 2>/dev/null | wc -l)
+if [ $DVB_COUNT -gt 0 ]; then
+    print_success "✅ Pronađeno $DVB_COUNT DVB adaptera"
+    ls -la /dev/dvb*
+else
+    print_warning "⚠️ Nema DVB adaptera - možda treba modprobe ili hardware problem"
+fi
 
 # NODE.JS INSTALL
 print_status "Node.js instalacija..."
@@ -94,18 +111,40 @@ CURRENT_DIR=$(pwd)
 chmod -R 777 "$CURRENT_DIR" 2>/dev/null || true
 print_success "777 permisije postavljene na sve fajlove"
 
-# MUMUDVB KOMPAJLIRANJE IZ LOKALNOG FOLDERA
-print_status "MuMuDVB kompajliranje iz projekta..."
+# MUMUDVB - AUTO CLONE I KOMPAJLIRANJE
+print_status "MuMuDVB auto setup..."
+
+# Ako nema MuMuDVB folder, kloniraj ga
+if [ ! -d "$CURRENT_DIR/MuMuDVB" ]; then
+    print_status "Kloniranje MuMuDVB..."
+    cd "$CURRENT_DIR"
+    git clone https://github.com/braice/MuMuDVB.git || {
+        print_warning "Git clone failed, probam alternative..."
+        git clone https://github.com/mumudvb/mumudvb.git MuMuDVB
+    }
+    print_success "MuMuDVB kloniran"
+fi
+
 if [ -d "$CURRENT_DIR/MuMuDVB" ]; then
     cd "$CURRENT_DIR/MuMuDVB"
+    chmod 777 * -R 2>/dev/null || true
     make clean 2>/dev/null || true
     autoreconf -i -f
     ./configure --enable-cam-support --enable-scam-support
     make -j$(nproc)
     make install
-    print_success "MuMuDVB instaliran iz lokalnog foldera: $(which mumudvb)"
+    
+    # FORCE LINK u PATH
+    MUMUDVB_BIN=$(find . -name "mumudvb" -type f -executable | head -1)
+    if [ -n "$MUMUDVB_BIN" ]; then
+        cp "$MUMUDVB_BIN" /usr/local/bin/mumudvb
+        chmod 777 /usr/local/bin/mumudvb
+        print_success "✅ MuMuDVB instaliran: $(which mumudvb)"
+    else
+        print_warning "❌ MuMuDVB binary not found after build!"
+    fi
 else
-    print_error "MuMuDVB folder ne postoji u projektu! Pokreni iz MuMuDVB-WebPanel foldera!"
+    print_error "❌ MuMuDVB folder problem!"
 fi
 
 # OSCAM KOMPAJLIRANJE IZ LOKALNOG FOLDERA - SCHIMMELREITER SMOD
