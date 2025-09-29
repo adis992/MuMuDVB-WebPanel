@@ -592,14 +592,12 @@ app.post('/api/oscam/config/:file', (req, res) => {
 app.post('/api/wscan/start', (req, res) => {
     const satellite = req.body.satellite || 'HOTBIRD';
     exec('w-scan -f s -s ' + satellite + ' -o 7 -t 3', (error, stdout, stderr) => {
-        res.json({
+            res.json({
                 success: !error,
                 output: stdout || stderr || 'W-scan completed',
                 satellite: satellite
             });
         });
-    });
-});
     });
 });
 
@@ -678,10 +676,18 @@ print_success "Node.js packages instalirani"
 # FORCE SYNTAX CHECK
 print_status "Test server.js syntax..."
 node -c /opt/mumudvb-webpanel/server.js && print_success "✅ Syntax OK" || {
-    print_warning "❌ Syntax ERROR - popravka..."
-    # Manual fix za template literals
-    sed -i 's/\\\${\([^}]*\)}/\1/g' /opt/mumudvb-webpanel/server.js
-    node -c /opt/mumudvb-webpanel/server.js && print_success "✅ Fixed!" || print_warning "Still broken!"
+    print_warning "❌ Syntax ERROR - brutal fix..."
+    cd /opt/mumudvb-webpanel
+    
+    # Remove extra bracket patterns that cause problems
+    sed -i '/^    });$/d' server.js
+    sed -i '/^});$/N;s/^});\n});$/});/' server.js
+    
+    # Test again
+    node -c server.js && print_success "✅ Brutal fix worked!" || {
+        print_warning "Still broken - manual intervention needed"
+        echo "Manual fix: cd /opt/mumudvb-webpanel && nano server.js (remove extra } on line ~168)"
+    }
 }
 
 # Kreiraj uploads direktorijum za multer
