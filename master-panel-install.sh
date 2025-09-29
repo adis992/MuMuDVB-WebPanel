@@ -15,7 +15,20 @@ print_warning() { echo -e "⚠️ $1"; }
 
 # CLEANUP
 print_status "Kompletna cleanup..."
-systemctl stop mumudvb-webpanel 2>/dev/null || true
+systemctl stop mumudvb-webpanel 2>/dev/n// W-Scan Start
+app.post('/api/wscan/start', (req, res) => {
+    const satellite = req.body.satellite || 'S19E2';
+    
+    // Check if w-scan exists
+    exec('which w-scan', (checkError) => {
+        if (checkError) {
+            return res.json({
+                success: false,
+                error: 'w-scan nije instaliran! Instaliraj sa: apt install w-scan'
+            });
+        }
+        
+        exec('w-scan -f s -s ' + satellite + ' -o 7 -t 3', (error, stdout, stderr) => {|| true
 systemctl stop oscam 2>/dev/null || true
 pkill -f mumudvb 2>/dev/null || true
 pkill -f oscam 2>/dev/null || true
@@ -51,7 +64,11 @@ print_success "Node.js instaliran: $(node --version)"
 
 # DVB PAKETI
 print_status "DVB paketi..."
-apt install -y dvb-tools w-scan libdvbv5-dev 2>/dev/null || true
+apt install -y dvb-tools w-scan libdvbv5-dev 2>/dev/null || {
+    print_warning "w-scan apt install failed, trying manual install..."
+    apt update
+    apt install -y w-scan || print_warning "w-scan install problem - možda nije dostupan u ovom repo"
+}
 
 # SET PERMISIJE NA SVE FAJLOVE - PRVO EXECUTABLE NA SEBE
 chmod +x "$0" 2>/dev/null || true
@@ -516,10 +533,13 @@ app.post('/api/wscan/start', (req, res) => {
     const satellite = req.body.satellite || 'HOTBIRD';
     exec('w-scan -f s -s ' + satellite + ' -o 7 -t 3', (error, stdout, stderr) => {
         res.json({
-            success: !error,
-            output: stdout || stderr || 'W-scan completed',
-            error: error ? error.message : null
+                success: !error,
+                output: stdout || stderr || 'W-scan completed',
+                satellite: satellite
+            });
         });
+    });
+});
     });
 });
 
