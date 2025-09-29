@@ -270,8 +270,8 @@ chmod 755 /opt/mumudvb-webpanel/configs
 
 print_success "Direktorijumi i permisije kreirani"
 
-# MUMUDVB DEFAULTNA KONFIGURACIJA
-print_status "MuMuDVB defaultna konfiguracija..."
+# MUMUDVB DEFAULTNA KONFIGURACIJA - USER FIXED VERSION
+print_status "MuMuDVB defaultna konfiguracija (user optimized)..."
 cat > /etc/mumudvb/mumudvb.conf << 'EOF'
 # MuMuDVB Configuration - RADNA VERZIJA
 # DVB-S/S2 Setup za HOTBIRD 19.2E
@@ -290,15 +290,13 @@ modulation=8PSK
 
 
 unicast=1
-ip=0.0.0.0
+ip_http=0.0.0.0
 port_http=4242
 
 
-multicast=1
+multicast_ipv4=1
 autoconf_ip4=239.100.%card.%number
 common_port=1234
-ttl_multicast=2
-multicast_auto_join=1
 
 # Autoconfiguration - automatski kanali
 autoconfiguration=full
@@ -308,15 +306,10 @@ autoconf_scrambled=1
 
 
 scam_support=1
-ring_buffer_default_size=32768
-decsa_default_delay=2500000
-send_default_delay=1500000
 
 
 # SAP announces
 sap=1
-sap_group=239.255.255.255
-sap_uri=sap://239.255.255.255
 
 # HTTP Unicast
 
@@ -334,10 +327,19 @@ cam_support=1
 # Rewrite za bolje compatibility
 rewrite_pat=1
 rewrite_sdt=1
-rewrite_eit sort_eit=1
+rewrite_eit=1
+sort_eit=1
 EOF
 
+# Set full permissions for config file
 chmod 777 /etc/mumudvb/mumudvb.conf
+print_success "MuMuDVB config kreiran sa 777 permisijama"
+
+# Also create backup template for web panel
+mkdir -p /etc/mumudvb/templates 2>/dev/null || true
+cp /etc/mumudvb/mumudvb.conf /etc/mumudvb/templates/default.conf
+chmod 777 /etc/mumudvb/templates/default.conf
+print_success "Template kreiran za web panel"
 print_success "MuMuDVB config kreiran"
 
 # OSCAM DEFAULTNA KONFIGURACIJA
@@ -746,7 +748,62 @@ app.get('/api/mumudvb/config', (req, res) => {
 app.post('/api/mumudvb/config', (req, res) => {
     try {
         fs.writeFileSync('/etc/mumudvb/mumudvb.conf', req.body.config);
+        // Set 777 permissions after save
+        exec('chmod 777 /etc/mumudvb/mumudvb.conf', (error) => {
+            if (error) console.log('Warning: Could not set config permissions');
+        });
         res.json({ success: true });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+// MuMuDVB Config Create New (from template)
+app.post('/api/mumudvb/config/new', (req, res) => {
+    try {
+        // Load default template
+        const templatePath = '/etc/mumudvb/templates/default.conf';
+        const defaultConfig = fs.readFileSync(templatePath, 'utf8');
+        
+        // Save as new config
+        fs.writeFileSync('/etc/mumudvb/mumudvb.conf', defaultConfig);
+        
+        // Set 777 permissions
+        exec('chmod 777 /etc/mumudvb/mumudvb.conf', (error) => {
+            if (error) console.log('Warning: Could not set config permissions');
+        });
+        
+        res.json({ 
+            success: true, 
+            message: 'New config created from template',
+            config: defaultConfig 
+        });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+// MuMuDVB Config Reset to Default
+app.post('/api/mumudvb/config/reset', (req, res) => {
+    try {
+        const templatePath = '/etc/mumudvb/templates/default.conf';
+        if (fs.existsSync(templatePath)) {
+            const defaultConfig = fs.readFileSync(templatePath, 'utf8');
+            fs.writeFileSync('/etc/mumudvb/mumudvb.conf', defaultConfig);
+            
+            // Set 777 permissions
+            exec('chmod 777 /etc/mumudvb/mumudvb.conf', (error) => {
+                if (error) console.log('Warning: Could not set config permissions');
+            });
+            
+            res.json({ 
+                success: true, 
+                message: 'Config reset to default template',
+                config: defaultConfig 
+            });
+        } else {
+            res.json({ success: false, error: 'Default template not found' });
+        }
     } catch (error) {
         res.json({ success: false, error: error.message });
     }
