@@ -777,11 +777,31 @@ app.post('/api/oscam/stop', (req, res) => {
 
 // OSCam Config Load with Path Check
 app.get('/api/oscam/config/:file', (req, res) => {
-    const file = req.params.file;
+    let file = req.params.file;
+    
+    // Map short names to full filenames
+    const fileMapping = {
+        'conf': 'oscam.conf',
+        'user': 'oscam.user', 
+        'server': 'oscam.server',
+        'oscam.conf': 'oscam.conf',
+        'oscam.user': 'oscam.user',
+        'oscam.server': 'oscam.server'
+    };
+    
+    // Use mapping or original filename
+    file = fileMapping[file] || file;
+    
     const allowedFiles = ['oscam.conf', 'oscam.user', 'oscam.server'];
     
     if (!allowedFiles.includes(file)) {
-        return res.json({ success: false, error: 'Invalid config file' });
+        return res.json({ 
+            success: false, 
+            error: 'Invalid config file',
+            allowed: allowedFiles,
+            mappings: fileMapping,
+            requested: req.params.file
+        });
     }
     
     // Try multiple possible paths for OSCam configs
@@ -809,11 +829,21 @@ app.get('/api/oscam/config/:file', (req, res) => {
     }
     
     if (config) {
+        // Add cache-busting headers to prevent 304 Not Modified
+        res.set({
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'ETag': Date.now().toString()
+        });
+        
         res.json({ 
             success: true, 
             config: config,
             path: foundPath,
-            file: file
+            file: file,
+            timestamp: new Date().toISOString(),
+            size: config.length
         });
     } else {
         // Try to create default config if not found
@@ -849,6 +879,65 @@ app.get('/api/oscam/config/:file', (req, res) => {
             }
         });
     }
+});
+
+// OSCam Config Debug Endpoint
+app.get('/api/oscam/debug', (req, res) => {
+    const paths = [
+        '/usr/local/etc/oscam/',
+        '/var/etc/oscam/', 
+        '/etc/oscam/',
+        './oscam/',
+        './'
+    ];
+    
+    const files = ['oscam.conf', 'oscam.user', 'oscam.server'];
+    const result = { found: [], missing: [], paths: paths };
+    
+    files.forEach(file => {
+        let found = false;
+        paths.forEach(path => {
+            const fullPath = path + file;
+            try {
+                if (fs.existsSync(fullPath)) {
+                    const stats = fs.statSync(fullPath);
+                    result.found.push({
+                        file: file,
+                        path: fullPath,
+                        size: stats.size,
+                        modified: stats.mtime
+                    });
+                    found = true;
+                }
+            } catch (e) {
+                // ignore
+            }
+        });
+        
+        if (!found) {
+            result.missing.push(file);
+        }
+    });
+    
+    res.set({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    });
+    
+    res.json({
+        success: true,
+        timestamp: new Date().toISOString(),
+        searchPaths: paths,
+        configFiles: files,
+        found: result.found,
+        missing: result.missing,
+        mappings: {
+            'conf': 'oscam.conf',
+            'user': 'oscam.user',
+            'server': 'oscam.server'
+        }
+    });
 });
 
 // OSCam Config Save with Path Correction
