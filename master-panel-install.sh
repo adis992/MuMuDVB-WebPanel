@@ -531,7 +531,7 @@ cat > /opt/mumudvb-webpanel/package.json << 'EOF'
 }
 EOF
 
-# MASTER SERVER.JS - ČIST TEMPLATE
+# MASTER SERVER.JS - SAMO MASTER-INDEX.HTML!
 cat > /opt/mumudvb-webpanel/server.js << 'EOF'
 const express = require('express');
 const { exec } = require('child_process');
@@ -553,8 +553,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // File upload setup
 const upload = multer({ dest: 'uploads/' });
 
-// Health Check
-# Main route - serve master-index.html
+// MAIN ROUTE - SAMO MASTER-INDEX.HTML!
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
