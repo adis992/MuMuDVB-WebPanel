@@ -86,6 +86,7 @@ fuser -k 8887/tcp 2>/dev/null || true
 fuser -k 8888/tcp 2>/dev/null || true
 rm -rf /opt/mumudvb-webpanel 2>/dev/null || true
 rm -rf /etc/mumudvb 2>/dev/null || true
+rm -rf /usr/local/etc/oscam 2>/dev/null || true
 rm -rf /var/etc/oscam 2>/dev/null || true
 rm -f /etc/systemd/system/mumudvb-webpanel.service 2>/dev/null || true
 rm -f /etc/systemd/system/oscam.service 2>/dev/null || true
@@ -166,7 +167,7 @@ cd "$CURRENT_DIR"
 if [ -d "oscam" ]; then
     cd oscam
     make clean 2>/dev/null || true
-    make allyesconfig CONF_DIR=/var/etc/oscam
+    make allyesconfig CONF_DIR=/usr/local/etc/oscam
     make -j$(nproc) USE_LIBUSB=1 USE_LIBCRYPTO=1 USE_SSL=1
     
     # Kopiraj u distribution folder - traži pravi binary
@@ -251,10 +252,10 @@ chmod 755 /etc/mumudvb
 chmod 755 /var/log/mumudvb
 
 # OSCam direktorijumi
-mkdir -p /var/etc/oscam
+mkdir -p /usr/local/etc/oscam
 mkdir -p /var/log/oscam
 mkdir -p /usr/local/var/oscam
-chmod 755 /var/etc/oscam
+chmod 755 /usr/local/etc/oscam
 chmod 755 /var/log/oscam
 chmod 755 /usr/local/var/oscam
 
@@ -333,7 +334,7 @@ print_success "MuMuDVB config kreiran"
 print_status "OSCam defaultna konfiguracija..."
 
 # oscam.conf - OPTIMIZOVANA VERZIJA
-cat > /var/etc/oscam/oscam.conf << 'EOF'
+cat > /usr/local/etc/oscam/oscam.conf << 'EOF'
 # OSCam Configuration - OPTIMIZOVANA ZA MUMUDVB + CCCAM
 [global]
 serverip = 0.0.0.0
@@ -402,7 +403,7 @@ mindown = 0
 EOF
 
 # oscam.user - OPTIMIZOVANA VERZIJA
-cat > /var/etc/oscam/oscam.user << 'EOF'
+cat > /usr/local/etc/oscam/oscam.user << 'EOF'
 # OSCam users - OPTIMIZOVANO ZA MUMUDVB
 
 # MuMuDVB local connection
@@ -447,7 +448,7 @@ services = !0B00
 EOF
 
 # oscam.server - OPTIMIZOVANA VERZIJA
-cat > /var/etc/oscam/oscam.server << 'EOF'
+cat > /usr/local/etc/oscam/oscam.server << 'EOF'
 # OSCam server configuration - OPTIMIZOVANO ZA CCCAM SHARING
 
 # CCcam reader - dhoom.org server - GLAVNI
@@ -502,9 +503,9 @@ nanddumpsize = 64
 # lb_weight = 1000
 EOF
 
-chmod 644 /var/etc/oscam/oscam.conf
-chmod 644 /var/etc/oscam/oscam.user  
-chmod 644 /var/etc/oscam/oscam.server
+chmod 644 /usr/local/etc/oscam/oscam.conf
+chmod 644 /usr/local/etc/oscam/oscam.user  
+chmod 644 /usr/local/etc/oscam/oscam.server
 
 # CCcam.cfg za standardni CCcam (alternativa za OSCam)
 print_status "Kreiranje CCcam.cfg alternativa..."
@@ -689,7 +690,7 @@ app.get('/api/oscam/status', (req, res) => {
 
 // Start OSCam
 app.post('/api/oscam/start', (req, res) => {
-    exec('oscam -b -c /var/etc/oscam', (error, stdout, stderr) => {
+    exec('oscam -b -c /usr/local/etc/oscam', (error, stdout, stderr) => {
         res.json({
             success: !error,
             message: error ? error.message : 'OSCam started',
@@ -718,7 +719,7 @@ app.get('/api/oscam/config/:file', (req, res) => {
     }
     
     try {
-        const config = fs.readFileSync('/var/etc/oscam/' + file, 'utf8');
+        const config = fs.readFileSync('/usr/local/etc/oscam/' + file, 'utf8');
         res.json({ success: true, config: config });
     } catch (error) {
         res.json({ success: false, error: 'Config file not found' });
@@ -813,20 +814,52 @@ app.post('/api/wscan/start', (req, res) => {
 
 // W-Scan Custom Command
 app.post('/api/wscan/custom', (req, res) => {
-    const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3';
+    const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3 -X > channels.conf';
     
     // Security check - only allow w_scan/w-scan commands
     if (!command.startsWith('w_scan') && !command.startsWith('w-scan')) {
         return res.json({ success: false, error: 'Only w_scan commands allowed' });
     }
     
-    exec(command, { timeout: 300000 }, (error, stdout, stderr) => {
+    console.log(`🔍 Starting W-Scan: ${command}`);
+    const fullOutput = [];
+    
+    const child = exec(command, { timeout: 300000 }, (error, stdout, stderr) => {
+        const output = stdout + stderr;
+        console.log(`✅ W-Scan completed. Output length: ${output.length} chars`);
+        
+        // Check if channels.conf was generated
+        const fs = require('fs');
+        let channelsInfo = '';
+        try {
+            if (fs.existsSync('./channels.conf')) {
+                const stats = fs.statSync('./channels.conf');
+                channelsInfo = `\n\n📺 channels.conf generated successfully!\n📁 Location: ${process.cwd()}/channels.conf\n📊 Size: ${stats.size} bytes\n📅 Created: ${stats.mtime}`;
+            } else {
+                channelsInfo = '\n\n⚠️ channels.conf not found in current directory';
+            }
+        } catch (e) {
+            channelsInfo = `\n\n❌ Error checking channels.conf: ${e.message}`;
+        }
+        
         res.json({
             success: !error,
-            output: stdout || stderr || 'W-scan completed',
+            output: output + channelsInfo,
             command: command,
-            error: error ? error.message : null
+            error: error ? error.message : null,
+            channelsGenerated: fs.existsSync('./channels.conf')
         });
+    });
+    
+    // Real-time output logging
+    child.stdout.on('data', (data) => {
+        console.log(`W-Scan: ${data}`);
+        fullOutput.push(data);
+    });
+    
+    child.stderr.on('data', (data) => {
+        console.log(`W-Scan: ${data}`);
+        fullOutput.push(data);
     });
 });
 
@@ -1075,19 +1108,30 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-# OSCam servis
+# OSCam servis - ISPRAVLJEN ZA /usr/local/etc/oscam
 cat > /etc/systemd/system/oscam.service << 'EOF'
 [Unit]
-Description=OSCam - Software CAM
+Description=OSCam - Software CAM for MuMuDVB
 After=network.target
+Wants=network.target
 
 [Service]
 Type=forking
 User=root
-ExecStart=/usr/local/bin/oscam -b -c /var/etc/oscam
+Group=root
+ExecStart=/usr/local/bin/oscam -b -c /usr/local/etc/oscam
+ExecReload=/bin/kill -HUP $MAINPID
 PIDFile=/var/run/oscam.pid
 Restart=always
 RestartSec=10
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/usr/local/etc/oscam /var/run /var/log
 
 [Install]
 WantedBy=multi-user.target
