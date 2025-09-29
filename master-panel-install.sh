@@ -287,8 +287,7 @@ modulation=8PSK
 
 
 # Multicast konfiguracija
-
-multicast_ipv4=1
+multicast=1
 autoconf_ip4=239.100.%card.%number
 common_port=1234
 ttl_multicast=2
@@ -1634,6 +1633,36 @@ ReadWritePaths=/usr/local/etc/oscam /var/run /var/log
 WantedBy=multi-user.target
 EOF
 
+# MuMuDVB servis - GLAVNI DVB STREAMING SERVIS
+cat > /etc/systemd/system/mumudvb.service << 'EOF'
+[Unit]
+Description=MuMuDVB Multicast Streamer
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/mumudvb -c /etc/mumudvb/mumudvb.conf -d
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=30
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Prevent rapid restart loops
+StartLimitInterval=60
+StartLimitBurst=3
+
+# DVB device access
+SupplementaryGroups=audio video
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 # CCcam service alternativa (ako treba standardni CCcam umesto OSCam)
 cat > /etc/systemd/system/cccam.service << 'EOF'
 [Unit]
@@ -1655,6 +1684,7 @@ EOF
 
 systemctl daemon-reload
 systemctl enable mumudvb-webpanel
+systemctl enable mumudvb 2>/dev/null || true
 systemctl enable oscam 2>/dev/null || true
 # systemctl enable cccam 2>/dev/null || true  # Uncomment if using CCcam instead of OSCam
 
@@ -1673,7 +1703,11 @@ print_status "Pokretanje MuMuDVB sa tuner prioritetom..."
 if [ -f "/etc/mumudvb/mumudvb.conf" ]; then
     # Check if tuner is free
     if ! pgrep -f "w_scan\|w-scan" > /dev/null; then
-        mumudvb -c /etc/mumudvb/mumudvb.conf -d -v 2>/dev/null &
+        # Start MuMuDVB kao systemd servis umjesto manual process
+        systemctl start mumudvb 2>/dev/null || {
+            print_warning "⚠️ SystemD servis problem - pokušaj manual start..."
+            mumudvb -c /etc/mumudvb/mumudvb.conf -d 2>/dev/null &
+        }
         sleep 2
         if pgrep -f mumudvb > /dev/null; then
             print_success "✅ MuMuDVB pokrenut - tuner zauzet (sprečava W-Scan konflikt)"
