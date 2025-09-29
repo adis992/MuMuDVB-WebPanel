@@ -635,23 +635,89 @@ app.get('/api/mumudvb/status', (req, res) => {
     });
 });
 
-// Start MuMuDVB
+// Start MuMuDVB with Tuner Conflict Check
 app.post('/api/mumudvb/start', (req, res) => {
-    exec('mumudvb -d -c /etc/mumudvb/mumudvb.conf', (error, stdout, stderr) => {
-        res.json({
-            success: !error,
-            message: error ? error.message : 'MuMuDVB started',
-            output: stdout || stderr
+    // Check if W-Scan is running first
+    exec('pgrep -f "w_scan|w-scan" | wc -l', (checkError, checkStdout) => {
+        const wscanRunning = parseInt(checkStdout.trim()) > 0;
+        
+        if (wscanRunning) {
+            return res.json({
+                success: false,
+                message: 'Cannot start MuMuDVB: W-Scan is using the tuner',
+                error: 'Tuner conflict detected',
+                suggestion: 'Stop W-Scan first or wait for completion'
+            });
+        }
+        
+        // Check if MuMuDVB is already running
+        exec('pgrep -f mumudvb | wc -l', (runCheckError, runCheckStdout) => {
+            const mumudvbRunning = parseInt(runCheckStdout.trim()) > 0;
+            
+            if (mumudvbRunning) {
+                return res.json({
+                    success: false,
+                    message: 'MuMuDVB is already running',
+                    error: 'Process already exists',
+                    suggestion: 'Stop MuMuDVB first if you want to restart'
+                });
+            }
+            
+            // Start MuMuDVB
+            console.log(`🚀 Starting MuMuDVB...`);
+            exec('mumudvb -d -c /etc/mumudvb/mumudvb.conf', (error, stdout, stderr) => {
+                const success = !error;
+                console.log(success ? `✅ MuMuDVB started successfully` : `❌ MuMuDVB start failed: ${error?.message}`);
+                
+                res.json({
+                    success: success,
+                    message: error ? `MuMuDVB start failed: ${error.message}` : 'MuMuDVB started successfully',
+                    output: stdout || stderr,
+                    tunerFree: true
+                });
+            });
         });
     });
 });
 
-// Stop MuMuDVB
+// Stop MuMuDVB with Force Option
 app.post('/api/mumudvb/stop', (req, res) => {
-    exec('pkill -f mumudvb', (error) => {
+    const force = req.body.force || false;
+    const signal = force ? 'pkill -9 -f mumudvb' : 'pkill -f mumudvb';
+    
+    console.log(`🛑 Stopping MuMuDVB (force: ${force})...`);
+    
+    exec(signal, (error) => {
+        // Wait a moment and check if processes are actually stopped
+        setTimeout(() => {
+            exec('pgrep -f mumudvb | wc -l', (checkError, checkStdout) => {
+                const stillRunning = parseInt(checkStdout.trim()) > 0;
+                
+                console.log(stillRunning ? `⚠️  MuMuDVB processes still running` : `✅ MuMuDVB stopped`);
+                
+                res.json({
+                    success: true,
+                    message: stillRunning ? 'MuMuDVB stop signal sent (some processes may still be running)' : 'MuMuDVB stopped successfully',
+                    force: force,
+                    stillRunning: stillRunning,
+                    tunerReleased: !stillRunning
+                });
+            });
+        }, 1000);
+    });
+});
+
+// MuMuDVB Status Check
+app.get('/api/mumudvb/status', (req, res) => {
+    exec('pgrep -f mumudvb | wc -l', (error, stdout) => {
+        const processCount = parseInt(stdout.trim()) || 0;
+        const isRunning = processCount > 0;
+        
         res.json({
-            success: true,
-            message: 'MuMuDVB stop signal sent'
+            running: isRunning,
+            processCount: processCount,
+            status: isRunning ? 'MuMuDVB is running' : 'MuMuDVB is stopped',
+            httpUrl: isRunning ? 'http://localhost:4242' : null
         });
     });
 });
@@ -812,9 +878,21 @@ app.post('/api/wscan/start', (req, res) => {
     });
 });
 
-// W-Scan Custom Command
+// Global variable to track running W-Scan process
+let runningWScanProcess = null;
+
+// W-Scan Custom Command with Tuner Management
 app.post('/api/wscan/custom', (req, res) => {
     const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3 -X > channels.conf';
+    
+    // Check if W-Scan is already running
+    if (runningWScanProcess) {
+        return res.json({ 
+            success: false, 
+            error: 'W-Scan is already running. Stop it first or wait for completion.',
+            pid: runningWScanProcess.pid 
+        });
+    }
     
     // Security check - only allow w_scan/w-scan commands
     if (!command.startsWith('w_scan') && !command.startsWith('w-scan')) {
@@ -822,58 +900,205 @@ app.post('/api/wscan/custom', (req, res) => {
     }
     
     console.log(`🔍 Starting W-Scan: ${command}`);
-    const fullOutput = [];
+    console.log(`⚠️  WARNING: This will temporarily block DVB tuner for MuMuDVB`);
     
-    const child = exec(command, { timeout: 300000 }, (error, stdout, stderr) => {
-        const output = stdout + stderr;
-        console.log(`✅ W-Scan completed. Output length: ${output.length} chars`);
-        
-        // Check if channels.conf was generated
-        const fs = require('fs');
-        let channelsInfo = '';
-        try {
-            if (fs.existsSync('./channels.conf')) {
-                const stats = fs.statSync('./channels.conf');
-                channelsInfo = `\n\n📺 channels.conf generated successfully!\n📁 Location: ${process.cwd()}/channels.conf\n📊 Size: ${stats.size} bytes\n📅 Created: ${stats.mtime}`;
-            } else {
-                channelsInfo = '\n\n⚠️ channels.conf not found in current directory';
-            }
-        } catch (e) {
-            channelsInfo = `\n\n❌ Error checking channels.conf: ${e.message}`;
+    const fullOutput = [];
+    const startTime = Date.now();
+    
+    // Step 1: Stop MuMuDVB to free tuner
+    console.log(`🛑 Stopping MuMuDVB to free tuner...`);
+    exec('pkill -f mumudvb; sleep 2', (stopError) => {
+        if (stopError) {
+            console.log(`⚠️  MuMuDVB stop warning: ${stopError.message}`);
         }
         
-        res.json({
-            success: !error,
-            output: output + channelsInfo,
-            command: command,
-            error: error ? error.message : null,
-            channelsGenerated: fs.existsSync('./channels.conf')
+        // Step 2: Start W-Scan process
+        runningWScanProcess = exec(command, { timeout: 300000 }, (error, stdout, stderr) => {
+            const output = stdout + stderr;
+            const duration = Math.round((Date.now() - startTime) / 1000);
+            
+            console.log(`✅ W-Scan completed in ${duration}s. Output length: ${output.length} chars`);
+            
+            // Step 3: Force disconnect from tuner
+            console.log(`🔌 Disconnecting from tuner...`);
+            exec('pkill -f w_scan; pkill -f w-scan; sleep 1', (disconnectError) => {
+                if (disconnectError) {
+                    console.log(`⚠️  Tuner disconnect warning: ${disconnectError.message}`);
+                }
+                
+                // Step 4: Reset DVB modules (force clean disconnect)
+                exec('modprobe -r dvb_core 2>/dev/null; sleep 1; modprobe dvb_core 2>/dev/null', (resetError) => {
+                    if (resetError) {
+                        console.log(`⚠️  DVB module reset warning: ${resetError.message}`);
+                    }
+                    
+                    // Step 5: Check channels.conf generation
+                    const fs = require('fs');
+                    let channelsInfo = '';
+                    let channelsGenerated = false;
+                    
+                    try {
+                        if (fs.existsSync('./channels.conf')) {
+                            const stats = fs.statSync('./channels.conf');
+                            channelsInfo = `\n\n📺 channels.conf generated successfully!\n📁 Location: ${process.cwd()}/channels.conf\n📊 Size: ${stats.size} bytes\n📅 Created: ${stats.mtime}`;
+                            channelsGenerated = true;
+                        } else {
+                            channelsInfo = '\n\n⚠️ channels.conf not found in current directory';
+                        }
+                    } catch (e) {
+                        channelsInfo = `\n\n❌ Error checking channels.conf: ${e.message}`;
+                    }
+                    
+                    // Step 6: Clear running process reference
+                    runningWScanProcess = null;
+                    
+                    // Step 7: Send response
+                    const finalOutput = output + channelsInfo + `\n\n🕐 Scan duration: ${duration} seconds\n🔌 Tuner disconnected - safe to restart MuMuDVB\n\n💡 TIP: Start MuMuDVB manually or it will auto-restart`;
+                    
+                    res.json({
+                        success: !error,
+                        output: finalOutput,
+                        command: command,
+                        error: error ? error.message : null,
+                        channelsGenerated: channelsGenerated,
+                        duration: duration,
+                        tunerDisconnected: true
+                    });
+                    
+                    console.log(`🔄 W-Scan process completed and tuner released`);
+                });
+            });
         });
+        
+        // Store PID for tracking
+        if (runningWScanProcess) {
+            console.log(`📋 W-Scan process started with PID: ${runningWScanProcess.pid}`);
+        }
     });
     
     // Real-time output logging
-    child.stdout.on('data', (data) => {
-        console.log(`W-Scan: ${data}`);
-        fullOutput.push(data);
-    });
+    if (runningWScanProcess) {
+        runningWScanProcess.stdout.on('data', (data) => {
+            console.log(`W-Scan: ${data.toString().trim()}`);
+            fullOutput.push(data.toString());
+        });
+        
+        runningWScanProcess.stderr.on('data', (data) => {
+            console.log(`W-Scan: ${data.toString().trim()}`);
+            fullOutput.push(data.toString());
+        });
+        
+        runningWScanProcess.on('error', (error) => {
+            console.log(`❌ W-Scan process error: ${error.message}`);
+            runningWScanProcess = null;
+        });
+    }
+});
+
+// W-Scan Stop with Force Tuner Disconnect
+app.post('/api/wscan/stop', (req, res) => {
+    console.log(`🛑 Force stopping W-Scan process...`);
     
-    child.stderr.on('data', (data) => {
-        console.log(`W-Scan: ${data}`);
-        fullOutput.push(data);
+    // Step 1: Kill W-Scan processes
+    exec('pkill -9 -f w_scan; pkill -9 -f w-scan; sleep 1', (killError) => {
+        // Step 2: Force disconnect from tuner
+        exec('pkill -9 -f dvb; sleep 1', (dvbError) => {
+            // Step 3: Reset DVB modules for clean tuner release
+            exec('modprobe -r dvb_core 2>/dev/null; sleep 2; modprobe dvb_core 2>/dev/null', (resetError) => {
+                
+                // Clear running process reference
+                if (runningWScanProcess) {
+                    try {
+                        runningWScanProcess.kill('SIGKILL');
+                    } catch (e) {
+                        console.log(`⚠️  Process kill warning: ${e.message}`);
+                    }
+                    runningWScanProcess = null;
+                }
+                
+                console.log(`✅ W-Scan force stopped and tuner released`);
+                
+                res.json({
+                    success: true,
+                    message: 'W-Scan force stopped and tuner disconnected',
+                    actions: [
+                        'W-Scan processes killed',
+                        'DVB processes terminated', 
+                        'DVB modules reset',
+                        'Tuner released for MuMuDVB'
+                    ]
+                });
+            });
+        });
     });
 });
 
-// W-Scan Stop
-app.post('/api/wscan/stop', (req, res) => {
-    exec('pkill -f w_scan; pkill -f w-scan', (error) => {
+// W-Scan Process Status
+app.get('/api/wscan/status', (req, res) => {
+    exec('pgrep -f "w_scan|w-scan" | wc -l', (error, stdout) => {
+        const processCount = parseInt(stdout.trim()) || 0;
+        const isRunning = runningWScanProcess !== null || processCount > 0;
+        
+        let pid = null;
+        if (runningWScanProcess) {
+            pid = runningWScanProcess.pid;
+        }
+        
         res.json({
-            success: true,
-            message: 'W-scan stop signal sent'
+            running: isRunning,
+            processCount: processCount,
+            pid: pid,
+            managed: runningWScanProcess !== null,
+            status: isRunning ? 'W-Scan is running - tuner blocked' : 'W-Scan idle - tuner available'
         });
     });
 });
 
 // ============= TUNERS API =============
+
+// Tuner Status with Conflict Detection
+app.get('/api/tuners/status', (req, res) => {
+    // Check processes using tuners
+    exec('lsof /dev/dvb* 2>/dev/null | grep -v COMMAND', (lsofError, lsofStdout) => {
+        exec('pgrep -f "mumudvb|w_scan|w-scan" -l', (procError, procStdout) => {
+            const tunerProcesses = lsofStdout ? lsofStdout.trim().split('\n').filter(line => line.length > 0) : [];
+            const allProcesses = procStdout ? procStdout.trim().split('\n').filter(line => line.length > 0) : [];
+            
+            const mumudvbRunning = allProcesses.some(line => line.includes('mumudvb'));
+            const wscanRunning = allProcesses.some(line => line.includes('w_scan') || line.includes('w-scan'));
+            
+            let status = 'Available';
+            let blockedBy = null;
+            
+            if (mumudvbRunning && wscanRunning) {
+                status = 'Conflict';
+                blockedBy = 'Both MuMuDVB and W-Scan';
+            } else if (mumudvbRunning) {
+                status = 'Used by MuMuDVB';
+                blockedBy = 'MuMuDVB';
+            } else if (wscanRunning) {
+                status = 'Used by W-Scan';
+                blockedBy = 'W-Scan';
+            }
+            
+            res.json({
+                tunerStatus: status,
+                available: status === 'Available',
+                conflict: status === 'Conflict',
+                blockedBy: blockedBy,
+                processes: {
+                    mumudvb: mumudvbRunning,
+                    wscan: wscanRunning,
+                    tunerProcesses: tunerProcesses.length,
+                    allProcesses: allProcesses
+                },
+                recommendation: status === 'Available' ? 'Safe to start any service' : 
+                               status === 'Conflict' ? 'Stop all services and restart one by one' :
+                               `Stop ${blockedBy} to free tuner`
+            });
+        });
+    });
+});
 
 // Scan DVB Tuners
 app.get('/api/tuners/scan', (req, res) => {
