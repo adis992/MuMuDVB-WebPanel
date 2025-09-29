@@ -1172,6 +1172,20 @@
             setTimeout(startAllServices, 3000);
         }
 
+        // MuMuDVB restart function
+        async function restartMuMuDVB() {
+            try {
+                showAlert('Restarting MuMuDVB...', 'success');
+                await controlService('mumudvb', 'stop');
+                setTimeout(async () => {
+                    await controlService('mumudvb', 'start');
+                    showAlert('MuMuDVB restarted successfully!', 'success');
+                }, 2000);
+            } catch (error) {
+                showAlert('Error restarting MuMuDVB: ' + error.message, 'error');
+            }
+        }
+
         // Link functions
         async function openMuMuDVBLink() {
             const links = await getLinks();

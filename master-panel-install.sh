@@ -277,7 +277,7 @@ cat > /etc/mumudvb/mumudvb.conf << 'EOF'
 # DVB-S/S2 Setup za HOTBIRD 19.2E
 
 # DVB parametri
-adapter=0
+card=0
 tuner=0
 freq=10832
 pol=h
@@ -665,7 +665,7 @@ app.post('/api/mumudvb/start', (req, res) => {
             
             // Start MuMuDVB
             console.log(`🚀 Starting MuMuDVB...`);
-            exec('mumudvb -d -c /etc/mumudvb/mumudvb.conf', (error, stdout, stderr) => {
+            exec('mumudvb -c /etc/mumudvb/mumudvb.conf -d -v', (error, stdout, stderr) => {
                 const success = !error;
                 console.log(success ? `✅ MuMuDVB started successfully` : `❌ MuMuDVB start failed: ${error?.message}`);
                 
@@ -1148,7 +1148,7 @@ let runningWScanProcess = null;
 
 // W-Scan Custom Command with Tuner Management
 app.post('/api/wscan/custom', (req, res) => {
-    const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3';
+    const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3 -X > channels.conf';
     
     // Check if W-Scan is already running
     if (runningWScanProcess) {
@@ -1666,7 +1666,7 @@ print_status "Pokretanje MuMuDVB sa tuner prioritetom..."
 if [ -f "/etc/mumudvb/mumudvb.conf" ]; then
     # Check if tuner is free
     if ! pgrep -f "w_scan\|w-scan" > /dev/null; then
-        mumudvb -d -c /etc/mumudvb/mumudvb.conf 2>/dev/null &
+        mumudvb -c /etc/mumudvb/mumudvb.conf -d -v 2>/dev/null &
         sleep 2
         if pgrep -f mumudvb > /dev/null; then
             print_success "✅ MuMuDVB pokrenut - tuner zauzet (sprečava W-Scan konflikt)"
