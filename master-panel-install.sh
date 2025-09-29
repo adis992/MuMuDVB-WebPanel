@@ -287,7 +287,8 @@ modulation=8PSK
 
 
 # Multicast konfiguracija
-multicast=1
+
+multicast_ipv4=1
 autoconf_ip4=239.100.%card.%number
 common_port=1234
 ttl_multicast=2
@@ -298,6 +299,12 @@ autoconfiguration=full
 autoconf_radios=1
 autoconf_scrambled=1
 
+
+
+scam_support=1
+ring_buffer_default_size=32768
+decsa_default_delay=2500000
+send_default_delay=1500000
 
 
 # SAP announces
@@ -319,7 +326,7 @@ log_flush_interval=1
 
 # CAM/SCAM support (ako imaš kartice)
 cam_support=1
-scam_support=1
+
 
 # Rewrite za bolje compatibility
 rewrite_pat=1
