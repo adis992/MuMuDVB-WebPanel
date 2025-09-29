@@ -15,14 +15,20 @@ print_warning() { echo -e "⚠️ $1"; }
 
 # CLEANUP
 print_status "Kompletna cleanup..."
-systemctl stop mumudvb-webpanel 2>/dev/n// W-Scan Start
-app.post('/api/wscan/start', (req, res) => {
-    const satellite = req.body.satellite || 'S19E2';
-    
-    // Check if w-scan exists
-    exec('which w-scan', (checkError) => {
-        if (checkError) {
-            return res.json({
+systemctl stop mumudvb-webpanel 2>/dev/null || true
+systemctl stop oscam 2>/dev/null || true
+print_success "Cleanup done"
+
+# DEPENDENCY INSTALL
+print_status "Dependency instalacija..."
+apt update
+apt install -y build-essential git cmake mercurial subversion autotools-dev autoconf libtool pkg-config
+apt install -y libdvbcsa-dev libssl-dev libpcsclite-dev
+apt install -y dvb-tools libdvbv5-dev 2>/dev/null || {
+    print_warning "w-scan apt install failed, trying manual install..."
+    apt update
+    apt install -y w-scan || print_warning "w-scan install problem - možda nije dostupan u ovom repo"
+}
                 success: false,
                 error: 'w-scan nije instaliran! Instaliraj sa: apt install w-scan'
             });
