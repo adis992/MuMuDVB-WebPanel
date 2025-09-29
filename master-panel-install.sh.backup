@@ -488,7 +488,7 @@ cat > /opt/mumudvb-webpanel/package.json << 'EOF'
 }
 EOF
 
-# MASTER SERVER.JS - ČIST TEMPLATE
+# MASTER SERVER.JS - SA SVIM API ENDPOINTIMA
 cat > /opt/mumudvb-webpanel/server.js << 'EOF'
 const express = require('express');
 const { exec } = require('child_process');
