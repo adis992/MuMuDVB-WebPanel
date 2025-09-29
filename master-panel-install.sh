@@ -2,7 +2,12 @@
 
 # MASTER WEB PANEL INSTALLER - KOMPLETNO UPRAVLJANJE SVIME!
 # PERMISIJE, KONFIGURACIJE, SERVISI - SVE U JEDNOM PANELU!
-set -e# AUTO CHMOD 777 - kao što tražiš degenu
+
+# FORCE 777 ODMAH - PRIJE SVEGA OSTALOG!
+chmod 777 "$0" 2>/dev/null || true
+chmod 777 * 2>/dev/null || true
+
+set -e
 print_status "Auto chmod 777 setup..."
 CURRENT_DIR=$(pwd)
 chmod 777 "$CURRENT_DIR"/* 2>/dev/null || true
