@@ -2,9 +2,18 @@
 
 # MASTER WEB PANEL INSTALLER - KOMPLETNO UPRAVLJANJE SVIME!
 # PERMISIJE, KONFIGURACIJE, SERVISI - SVE U JEDNOM PANELU!
-set -e
+set -e# AUTO CHMOD 777 - kao što tražiš degenu
+print_status "Auto chmod 777 setup..."
+CURRENT_DIR=$(pwd)
+chmod 777 "$CURRENT_DIR"/* 2>/dev/null || true
+print_success "Chmod 777 done"
 
-echo "🚀 MASTER WEB PANEL INSTALLER - KOMPLETNO UPRAVLJANJE!"
+# CLEAN POSTOJEĆE INSTALACIJE
+print_status "Brisanje stare instalacije..."
+rm -rf /opt/mumudvb-webpanel 2>/dev/null || true
+systemctl stop mumudvb-webpanel 2>/dev/null || true
+systemctl stop oscam 2>/dev/null || true
+print_success "Cleanup done"o "🚀 MASTER WEB PANEL INSTALLER - KOMPLETNO UPRAVLJANJE!"
 echo "======================================================="
 
 # Funkcije
@@ -29,13 +38,14 @@ apt install -y dvb-tools libdvbv5-dev 2>/dev/null || {
     apt update
     apt install -y w-scan || print_warning "w-scan install problem - možda nije dostupan u ovom repo"
 }
-                success: false,
-                error: 'w-scan nije instaliran! Instaliraj sa: apt install w-scan'
-            });
-        }
-        
-        exec('w-scan -f s -s ' + satellite + ' -o 7 -t 3', (error, stdout, stderr) => {|| true
-systemctl stop oscam 2>/dev/null || true
+
+print_success "Dependencies instalirane"
+
+# NODE.JS INSTALL
+print_status "Node.js instalacija..."
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+apt install -y nodejs
+print_success "Node.js instaliran"
 pkill -f mumudvb 2>/dev/null || true
 pkill -f oscam 2>/dev/null || true
 pkill -f node 2>/dev/null || true
