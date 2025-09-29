@@ -1119,17 +1119,17 @@ app.post('/api/wscan/custom', (req, res) => {
                             channelsInfo = `\n\n📺 channels.conf generated successfully!\n📁 Location: ${process.cwd()}/channels.conf\n📊 Size: ${stats.size} bytes\n📅 Created: ${stats.mtime}`;
                             channelsGenerated = true;
                         } else {
-                            channelsInfo Failed to load OSCam conf= '\n\n⚠️ channels.conf not found in current directory';
+                            channelsInfo = '\n\n⚠️ channels.conf not found in current directory';
                         }
                     } catch (e) {
-                        channelsInfo = `\n\n❌ Error checking channels.conf: ${e.message}`;
+                        channelsInfo = '\n\n❌ Error checking channels.conf: ' + e.message;
                     }
                     
                     // Step 6: Clear running process reference
                     runningWScanProcess = null;
                     
                     // Step 7: Send response
-                    const finalOutput = output + channelsInfo + `\n\n🕐 Scan duration: ${duration} seconds\n🔌 Tuner disconnected - safe to restart MuMuDVB\n\n💡 TIP: Start MuMuDVB manually or it will auto-restart`;
+                    const finalOutput = output + channelsInfo + '\n\n🕐 Scan duration: ' + duration + ' seconds\n🔌 Tuner disconnected - safe to restart MuMuDVB\n\n💡 TIP: Start MuMuDVB manually or it will auto-restart';
                     
                     res.json({
                         success: !error,
@@ -1571,6 +1571,26 @@ systemctl stop oscam 2>/dev/null || true
 sleep 2
 systemctl start mumudvb-webpanel || print_warning "Web panel servis problem"
 systemctl start oscam 2>/dev/null || print_warning "OSCam servis skip"
+
+# MuMuDVB auto-start da zauzme tuner PRVI (sprečava W-Scan konflikt)
+print_status "Pokretanje MuMuDVB sa tuner prioritetom..."
+if [ -f "/etc/mumudvb/mumudvb.conf" ]; then
+    # Check if tuner is free
+    if ! pgrep -f "w_scan\|w-scan" > /dev/null; then
+        mumudvb -d -c /etc/mumudvb/mumudvb.conf 2>/dev/null &
+        sleep 2
+        if pgrep -f mumudvb > /dev/null; then
+            print_success "✅ MuMuDVB pokrenut - tuner zauzet (sprečava W-Scan konflikt)"
+            echo "📺 MuMuDVB HTTP: http://localhost:4242"
+        else
+            print_warning "⚠️ MuMuDVB pokretanje problem - tuner možda nedostupan"
+        fi
+    else
+        print_warning "⚠️ Tuner već zauzet - preskačem MuMuDVB auto-start"
+    fi
+else
+    print_warning "⚠️ MuMuDVB config ne postoji - preskačem auto-start"
+fi
 
 # FINALNA PROVERA
 print_status "Finalna provera..."
