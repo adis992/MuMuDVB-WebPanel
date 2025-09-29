@@ -287,6 +287,13 @@ modulation=8PSK
 
 
 # Multicast konfiguracija
+
+
+unicast=1
+ip=0.0.0.0
+port_http=4242
+
+
 multicast=1
 autoconf_ip4=239.100.%card.%number
 common_port=1234
@@ -312,10 +319,7 @@ sap_group=239.255.255.255
 sap_uri=sap://239.255.255.255
 
 # HTTP Unicast
-unicast=1
-ip_http=0.0.0.0
-port_http=4242
-unicast_max_clients=200
+
 
 # Logging
 log_type=console
