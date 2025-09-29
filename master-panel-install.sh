@@ -14,12 +14,20 @@ echo "======================================================="
 
 set -e
 
+# PROVJERI MASTER-INDEX.HTML PRIJE SVEGA!
+CURRENT_DIR=$(pwd)
+print_status "Provjera MASTER-INDEX.HTML..."
+if [ -f "$CURRENT_DIR/web_panel/master-index.html" ]; then
+    print_success "✅ MASTER-INDEX.HTML pronađen - može instalacija!"
+else
+    print_error "❌ MASTER-INDEX.HTML NE POSTOJI! web_panel/master-index.html MORA postojati prije instalacije!"
+fi
+
 # FORCE 777 ODMAH - PRIJE SVEGA OSTALOG!
 chmod 777 "$0" 2>/dev/null || true
 chmod 777 * 2>/dev/null || true
 
 print_status "Auto chmod 777 setup..."
-CURRENT_DIR=$(pwd)
 chmod 777 "$CURRENT_DIR"/* 2>/dev/null || true
 print_success "Chmod 777 done"
 
@@ -546,13 +554,9 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const upload = multer({ dest: 'uploads/' });
 
 // Health Check
+# Main route - serve master-index.html
 app.get('/', (req, res) => {
-    res.json({ 
-        status: 'OK', 
-        service: 'MuMuDVB Master Panel',
-        version: '2.0.0',
-        timestamp: new Date().toISOString()
-    });
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/health', (req, res) => {
@@ -842,18 +846,25 @@ node -c /opt/mumudvb-webpanel/server.js && print_success "✅ Syntax OK" || {
 mkdir -p /opt/mumudvb-webpanel/uploads
 print_success "Uploads direktorijum kreiran"
 
-# COPY HTML INTERFACE - UVEK KORISTI MASTER-INDEX.HTML!
-print_status "HTML interface kreiranje..."
+# COPY MASTER-INDEX.HTML - SAMO FULL VERZIJA!
+print_status "MASTER-INDEX.HTML kopiranje - SAMO FULL VERZIJA!"
+
+# PRVO provjeri da li postoji
 if [ -f "$CURRENT_DIR/web_panel/master-index.html" ]; then
+    print_status "Kopiranje master-index.html iz web_panel/..."
     cp "$CURRENT_DIR/web_panel/master-index.html" /opt/mumudvb-webpanel/public/index.html
-    print_success "✅ Master-index.html kopiran - FULL VERZIJA!"
-elif [ -f "$CURRENT_DIR/master-index.html" ]; then
-    cp "$CURRENT_DIR/master-index.html" /opt/mumudvb-webpanel/public/index.html
-    print_success "✅ Master-index.html kopiran iz root foldera!"
+    chmod 644 /opt/mumudvb-webpanel/public/index.html
+    print_success "✅ MASTER-INDEX.HTML kopiran - FULL VERZIJA SA 10 TABOVA!"
 else
-    print_error "❌ MASTER-INDEX.HTML NE POSTOJI! Mora postojati web_panel/master-index.html!"
+    print_error "❌ MASTER-INDEX.HTML NE POSTOJI! web_panel/master-index.html MORA postojati!"
 fi
-print_success "Master HTML interface kreiran - BEZ FALLBACK-a!"
+
+# Provjeri da li je kopiran
+if [ ! -f "/opt/mumudvb-webpanel/public/index.html" ]; then
+    print_error "❌ INDEX.HTML nije kreiran! STOP!"
+fi
+
+print_success "✅ MASTER HTML INTERFACE - SAMO FULL VERZIJA!"
 
 # SYSTEMD SERVISI
 print_status "Systemd servisi..."
