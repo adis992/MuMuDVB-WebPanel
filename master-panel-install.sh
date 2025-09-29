@@ -112,6 +112,12 @@ else
     apt install -y oscam 2>/dev/null || print_warning "OSCam skip - repo problemi" 
 fi
 
+# CLEAN POSTOJEĆE INSTALACIJE
+print_status "Brisanje stare instalacije..."
+rm -rf /opt/mumudvb-webpanel 2>/dev/null || true
+systemctl stop mumudvb-webpanel 2>/dev/null || true
+print_success "Clean done"
+
 # KREIRANJE DIREKTORIJUMA SA PERMISIJAMA
 print_status "Kreiranje direktorijuma i permisija..."
 
@@ -332,7 +338,7 @@ if [ -d "$CURRENT_DIR/web_panel" ]; then
 fi
 
 # PACKAGE.JSON - sa security fix
-cat > package.json << 'EOF'
+cat > /opt/mumudvb-webpanel/package.json << 'EOF'
 {
   "name": "mumudvb-master-panel",
   "version": "2.0.0",  
@@ -341,27 +347,47 @@ cat > package.json << 'EOF'
     "express": "^4.19.2",
     "ws": "^8.17.1",
     "multer": "^1.4.5-lts.1",
-    "fs-extra": "^11.2.0"
+    "fs-extra": "^11.2.0",
+    "cors": "^2.8.5"
   }
 }
 EOF
 
-npm install --no-audit
-
 # MASTER SERVER.JS - SA SVIM API ENDPOINTIMA
-cat > server.js << 'EOF'
+cat > /opt/mumudvb-webpanel/server.js << 'EOF'
 const express = require('express');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const cors = require('cors');
 const app = express();
 
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.static('public'));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // File upload setup
 const upload = multer({ dest: 'uploads/' });
+
+// Health Check
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        service: 'MuMuDVB Master Panel',
+        version: '2.0.0',
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', uptime: process.uptime() });
+});
 
 // ============= MUMUDVB API =============
 
@@ -459,7 +485,7 @@ app.get('/api/oscam/config/:file', (req, res) => {
     }
     
     try {
-        const config = fs.readFileSync(\`/var/etc/oscam/\${file}\`, 'utf8');
+        const config = fs.readFileSync('/var/etc/oscam/' + file, 'utf8');
         res.json({ success: true, config: config });
     } catch (error) {
         res.json({ success: false, error: 'Config file not found' });
@@ -476,7 +502,7 @@ app.post('/api/oscam/config/:file', (req, res) => {
     }
     
     try {
-        fs.writeFileSync(\`/var/etc/oscam/\${file}\`, req.body.config);
+        fs.writeFileSync('/var/etc/oscam/' + file, req.body.config);
         res.json({ success: true });
     } catch (error) {
         res.json({ success: false, error: error.message });
@@ -488,7 +514,7 @@ app.post('/api/oscam/config/:file', (req, res) => {
 // W-Scan Start
 app.post('/api/wscan/start', (req, res) => {
     const satellite = req.body.satellite || 'HOTBIRD';
-    exec(\`w-scan -f s -s \${satellite} -o 7 -t 3\`, (error, stdout, stderr) => {
+    exec('w-scan -f s -s ' + satellite + ' -o 7 -t 3', (error, stdout, stderr) => {
         res.json({
             success: !error,
             output: stdout || stderr || 'W-scan completed',
@@ -520,10 +546,10 @@ app.post('/api/service/:service/:action', (req, res) => {
         return res.json({ success: false, error: 'Invalid service or action' });
     }
     
-    exec(\`systemctl \${action} \${service}\`, (error, stdout, stderr) => {
+    exec('systemctl ' + action + ' ' + service, (error, stdout, stderr) => {
         res.json({
             success: !error,
-            output: stdout || stderr || \`Service \${service} \${action} completed\`
+            output: stdout || stderr || 'Service ' + service + ' ' + action + ' completed'
         });
     });
 });
@@ -537,7 +563,7 @@ app.get('/api/logs/:service', (req, res) => {
         return res.json({ success: false, error: 'Invalid service' });
     }
     
-    exec(\`journalctl -u \${service} -n 100 --no-pager\`, (error, stdout) => {
+    exec('journalctl -u ' + service + ' -n 100 --no-pager', (error, stdout) => {
         res.json({
             success: !error,
             logs: stdout || 'No logs available'
@@ -549,20 +575,38 @@ app.get('/api/logs/:service', (req, res) => {
 app.get('/api/links', (req, res) => {
     const serverIP = req.headers.host.split(':')[0];
     res.json({
-        mumudvb_http: \`http://\${serverIP}:4242\`,
-        oscam_web: \`http://\${serverIP}:8888\`,
-        webpanel: \`http://\${serverIP}:8887\`
+        mumudvb_http: 'http://' + serverIP + ':4242',
+        oscam_web: 'http://' + serverIP + ':8888',
+        webpanel: 'http://' + serverIP + ':8887'
     });
 });
 
 const PORT = 8887;
 app.listen(PORT, () => {
-    console.log(\`🚀 Master MuMuDVB Panel na portu \${PORT}\`);
-    console.log(\`🌐 Pristup: http://localhost:\${PORT}\`);
+    console.log('🚀 Master MuMuDVB Panel na portu ' + PORT);
+    console.log('🌐 Pristup: http://localhost:' + PORT);
 });
 EOF
 
 print_success "Master server.js kreiran"
+
+# NPM INSTALL - sada kada su svi fajlovi kreirani
+print_status "Instalacija Node.js dependencies..."
+cd /opt/mumudvb-webpanel && npm install --no-audit
+print_success "Node.js packages instalirani"
+
+# FORCE SYNTAX CHECK
+print_status "Test server.js syntax..."
+node -c /opt/mumudvb-webpanel/server.js && print_success "✅ Syntax OK" || {
+    print_warning "❌ Syntax ERROR - popravka..."
+    # Manual fix za template literals
+    sed -i 's/\\\${\([^}]*\)}/\1/g' /opt/mumudvb-webpanel/server.js
+    node -c /opt/mumudvb-webpanel/server.js && print_success "✅ Fixed!" || print_warning "Still broken!"
+}
+
+# Kreiraj uploads direktorijum za multer
+mkdir -p /opt/mumudvb-webpanel/uploads
+print_success "Uploads direktorijum kreiran"
 
 # COPY HTML INTERFACE
 print_status "HTML interface kreiranje..."
@@ -582,8 +626,12 @@ print_success "HTML interface kreiran"
 # SYSTEMD SERVISI
 print_status "Systemd servisi..."
 
+# Detektuj Node.js putanju
+NODE_PATH=$(which node || echo "/usr/bin/node")
+print_status "Node.js path: $NODE_PATH"
+
 # MuMuDVB Web Panel servis
-cat > /etc/systemd/system/mumudvb-webpanel.service << 'EOF'
+cat > /etc/systemd/system/mumudvb-webpanel.service << EOF
 [Unit]
 Description=MuMuDVB Master Web Panel
 After=network.target
@@ -592,7 +640,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/mumudvb-webpanel
-ExecStart=/usr/bin/node server.js
+ExecStart=$NODE_PATH server.js
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -628,12 +676,20 @@ print_success "Systemd servisi kreirani"
 
 # POKRETANJE SERVISA
 print_status "Pokretanje servisa..."
+systemctl stop mumudvb-webpanel 2>/dev/null || true
+systemctl stop oscam 2>/dev/null || true
+sleep 2
 systemctl start mumudvb-webpanel || print_warning "Web panel servis problem"
 systemctl start oscam 2>/dev/null || print_warning "OSCam servis skip"
 
 # FINALNA PROVERA
 print_status "Finalna provera..."
 sleep 3
+
+# Debug output za web panel servis
+echo "🔍 Web panel service debug:"
+systemctl status mumudvb-webpanel --no-pager -n 10 || true
+echo ""
 
 WEB_STATUS=$(systemctl is-active mumudvb-webpanel 2>/dev/null || echo "inactive")
 OSCAM_STATUS=$(systemctl is-active oscam 2>/dev/null || echo "inactive")
@@ -660,3 +716,10 @@ print_success "🔐 OSCam Web: http://$SERVER_IP:8888 (admin/admin)"
 echo ""
 print_success "🎯 SVE UPRAVLJANJE KROZ WEB PANEL NA 8887!"
 print_success "🔧 Editovanje konfiguracija, pokretanje servisa, sve na klik!"
+
+
+
+
+
+
+
