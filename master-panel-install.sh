@@ -897,89 +897,81 @@ app.post('/api/oscam/init', (req, res) => {
         }
         
         const configs = {
-            'oscam.conf': \`# OSCam Configuration - AUTO GENERATED
-[global]
-serverip = 0.0.0.0
-logfile = /var/log/oscam/oscam.log
-pidfile = /var/run/oscam.pid
-disablelog = 0
-disableuserfile = 0
-clienttimeout = 8000
-fallbacktimeout = 3000
-clientmaxidle = 300
-waitforcards = 1
-lb_mode = 1
-lb_save = 500
-
-[monitor]
-port = 988
-aulow = 120
-monlevel = 4
-nocrypt = 127.0.0.1,192.168.0.0-192.168.255.255
-
-[webif]
-httpport = 8888
-httpuser = admin
-httppwd = admin
-httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255
-
-[dvbapi]
-enabled = 1
-au = 1
-user = mumudvb
-boxtype = pc
-pmt_mode = 6
-
-[cccam]
-port = 12000
-reshare = 2
-version = 2.3.2
-\`,
-            'oscam.user': \`# OSCam Users - AUTO GENERATED
-[account]
-user = mumudvb
-pwd = mumudvb
-group = 1,2,3
-au = 1
-monlevel = 0
-
-[account]
-user = admin
-pwd = admin
-group = 1,2,3
-au = 1
-monlevel = 4
-\`,
-            'oscam.server': \`# OSCam Server - AUTO GENERATED
-[reader]
-label = dhoom_primary
-protocol = cccam
-device = dhoom.org,34000
-user = sead1302
-password = sead1302
-cccversion = 2.3.2
-group = 1,2,3
-disablecrccws = 1
-inactivitytimeout = 30
-reconnecttimeout = 60
-lb_weight = 300
-cccmaxhops = 3
-ccckeepalive = 1
-\`
+            'oscam.conf': '# OSCam Configuration - AUTO GENERATED\\n' +
+                '[global]\\n' +
+                'serverip = 0.0.0.0\\n' +
+                'logfile = /var/log/oscam/oscam.log\\n' +
+                'pidfile = /var/run/oscam.pid\\n' +
+                'disablelog = 0\\n' +
+                'disableuserfile = 0\\n' +
+                'clienttimeout = 8000\\n' +
+                'fallbacktimeout = 3000\\n' +
+                'clientmaxidle = 300\\n' +
+                'waitforcards = 1\\n' +
+                'lb_mode = 1\\n' +
+                'lb_save = 500\\n\\n' +
+                '[monitor]\\n' +
+                'port = 988\\n' +
+                'aulow = 120\\n' +
+                'monlevel = 4\\n' +
+                'nocrypt = 127.0.0.1,192.168.0.0-192.168.255.255\\n\\n' +
+                '[webif]\\n' +
+                'httpport = 8888\\n' +
+                'httpuser = admin\\n' +
+                'httppwd = admin\\n' +
+                'httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255\\n\\n' +
+                '[dvbapi]\\n' +
+                'enabled = 1\\n' +
+                'au = 1\\n' +
+                'user = mumudvb\\n' +
+                'boxtype = pc\\n' +
+                'pmt_mode = 6\\n\\n' +
+                '[cccam]\\n' +
+                'port = 12000\\n' +
+                'reshare = 2\\n' +
+                'version = 2.3.2\\n',
+            'oscam.user': '# OSCam Users - AUTO GENERATED\\n' +
+                '[account]\\n' +
+                'user = mumudvb\\n' +
+                'pwd = mumudvb\\n' +
+                'group = 1,2,3\\n' +
+                'au = 1\\n' +
+                'monlevel = 0\\n\\n' +
+                '[account]\\n' +
+                'user = admin\\n' +
+                'pwd = admin\\n' +
+                'group = 1,2,3\\n' +
+                'au = 1\\n' +
+                'monlevel = 4\\n',
+            'oscam.server': '# OSCam Server - AUTO GENERATED\\n' +
+                '[reader]\\n' +
+                'label = dhoom_primary\\n' +
+                'protocol = cccam\\n' +
+                'device = dhoom.org,34000\\n' +
+                'user = sead1302\\n' +
+                'password = sead1302\\n' +
+                'cccversion = 2.3.2\\n' +
+                'group = 1,2,3\\n' +
+                'disablecrccws = 1\\n' +
+                'inactivitytimeout = 30\\n' +
+                'reconnecttimeout = 60\\n' +
+                'lb_weight = 300\\n' +
+                'cccmaxhops = 3\\n' +
+                'ccckeepalive = 1\\n'
         };
         
         let createdCount = 0;
         const results = [];
         
         Object.keys(configs).forEach(filename => {
-            const filepath = \`/usr/local/etc/oscam/\${filename}\`;
+            const filepath = '/usr/local/etc/oscam/' + filename;
             try {
                 fs.writeFileSync(filepath, configs[filename]);
-                exec(\`chmod 644 \${filepath}\`, () => {});
+                exec('chmod 644 ' + filepath, () => {});
                 createdCount++;
-                results.push(\`✅ \${filename} created\`);
+                results.push('✅ ' + filename + ' created');
             } catch (writeError) {
-                results.push(\`❌ \${filename} failed: \${writeError.message}\`);
+                results.push('❌ ' + filename + ' failed: ' + writeError.message);
             }
         });
         
@@ -988,7 +980,7 @@ ccckeepalive = 1
             created: createdCount,
             total: Object.keys(configs).length,
             results: results,
-            message: \`OSCam configs initialized (\${createdCount}/\${Object.keys(configs).length})\`
+            message: 'OSCam configs initialized (' + createdCount + '/' + Object.keys(configs).length + ')'
         });
     });
 });
