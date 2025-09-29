@@ -1,0 +1,25 @@
+# OSCam users - OPTIMIZOVANO ZA MUMUDVB
+
+# MuMuDVB local connection
+[account]
+user = mumudvb
+pwd = mumudvb
+group = 1,2,3
+au = 1
+monlevel = 0
+
+# Admin user
+[account]
+user = admin
+pwd = admin
+group = 1,2,3
+au = 1
+monlevel = 4
+
+# Web user
+[account]
+user = web
+pwd = web
+group = 1,2,3
+au = 0
+monlevel = 0
