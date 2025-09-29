@@ -105,11 +105,8 @@ print_success "Node.js instaliran: $(node --version)"
 
 # DVB PAKETI
 print_status "DVB paketi..."
-apt install -y dvb-tools w-scan libdvbv5-dev 2>/dev/null || {
-    print_warning "w-scan apt install failed, trying manual install..."
-    apt update
-    apt install -y w-scan || print_warning "w-scan install problem - možda nije dostupan u ovom repo"
-}
+apt install -y dvb-tools libdvbv5-dev
+print_success "DVB osnovni paketi instalirani"
 
 # SET PERMISIJE NA SVE FAJLOVE - PRVO EXECUTABLE NA SEBE
 chmod +x "$0" 2>/dev/null || true
@@ -190,6 +187,44 @@ if [ -d "oscam" ]; then
 else
     print_warning "OSCam folder ne postoji - skip kompajliranje"
     apt install -y oscam 2>/dev/null || print_warning "OSCam skip - repo problemi" 
+fi
+
+# W-SCAN KOMPAJLIRANJE IZ GITHUB-A
+print_status "W-Scan kompajliranje iz GitHub-a..."
+cd "$CURRENT_DIR"
+
+# Kloniraj w_scan ako ne postoji
+if [ ! -d "w_scan" ]; then
+    print_status "Kloniranje w_scan iz GitHub-a..."
+    git clone https://github.com/tbsdtv/w_scan.git w_scan || {
+        print_error "❌ W-Scan git clone failed!"
+    }
+    print_success "W-Scan kloniran"
+fi
+
+if [ -d "w_scan" ]; then
+    cd w_scan
+    chmod 777 * -R 2>/dev/null || true
+    
+    # Clean i build
+    make clean 2>/dev/null || true
+    autoreconf -i -f 2>/dev/null || ./autogen.sh 2>/dev/null || true
+    ./configure
+    make -j$(nproc)
+    
+    # Instaliraj w_scan binary
+    if [ -f "w_scan" ]; then
+        cp w_scan /usr/local/bin/w_scan
+        chmod +x /usr/local/bin/w_scan
+        ln -sf /usr/local/bin/w_scan /usr/local/bin/w-scan 2>/dev/null || true
+        print_success "✅ W-Scan instaliran: $(which w_scan || which w-scan)"
+    else
+        print_warning "❌ W-Scan binary not found after build!"
+    fi
+    
+    print_success "W-Scan kompajliran iz GitHub-a!"
+else
+    print_error "❌ W-Scan folder problem!"
 fi
 
 # CLEAN POSTOJEĆE INSTALACIJE
@@ -703,7 +738,9 @@ app.get('/api/cccam/status', (req, res) => {
 // W-Scan Start
 app.post('/api/wscan/start', (req, res) => {
     const satellite = req.body.satellite || 'HOTBIRD';
-    exec('w-scan -f s -s ' + satellite + ' -o 7 -t 3', (error, stdout, stderr) => {
+    // Probaj oba w_scan i w-scan (fallback)
+    const wscanCmd = 'which w_scan >/dev/null 2>&1 && w_scan -f s -s ' + satellite + ' -o 7 -t 3 || w-scan -f s -s ' + satellite + ' -o 7 -t 3';
+    exec(wscanCmd, (error, stdout, stderr) => {
         res.json({
             success: !error,
             output: stdout || stderr || 'W-scan completed',
@@ -908,6 +945,17 @@ echo "🔍 Web panel service debug:"
 systemctl status mumudvb-webpanel --no-pager -n 10 || true
 echo ""
 
+# Test W-Scan
+echo "🔍 W-Scan test:"
+if command -v w_scan >/dev/null 2>&1; then
+    print_success "✅ w_scan dostupan: $(which w_scan)"
+elif command -v w-scan >/dev/null 2>&1; then
+    print_success "✅ w-scan dostupan: $(which w-scan)"
+else
+    print_warning "❌ W-Scan nije dostupan u PATH!"
+fi
+echo ""
+
 WEB_STATUS=$(systemctl is-active mumudvb-webpanel 2>/dev/null || echo "inactive")
 OSCAM_STATUS=$(systemctl is-active oscam 2>/dev/null || echo "inactive")
 
@@ -921,7 +969,13 @@ echo ""
 print_status "📁 KONFIGURACIJE:"
 print_success "✅ MuMuDVB: /etc/mumudvb/mumudvb.conf"
 print_success "✅ OSCam: /var/etc/oscam/"
-print_success "✅ W-Scan: /opt/mumudvb-webpanel/configs/"
+print_success "✅ W-Scan: kompajliran iz GitHub-a"
+
+echo ""
+print_status "🔧 COMPILED TOOLS:"
+print_success "✅ MuMuDVB: $(which mumudvb 2>/dev/null || echo 'not found')"
+print_success "✅ OSCam: $(which oscam 2>/dev/null || echo 'not found')"
+print_success "✅ W-Scan: $(which w_scan 2>/dev/null || which w-scan 2>/dev/null || echo 'not found')"
 
 echo ""
 print_status "🌐 PRISTUP LINKOVI:"
