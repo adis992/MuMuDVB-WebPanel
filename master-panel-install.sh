@@ -332,9 +332,9 @@ print_success "MuMuDVB config kreiran"
 # OSCAM DEFAULTNA KONFIGURACIJA
 print_status "OSCam defaultna konfiguracija..."
 
-# oscam.conf
+# oscam.conf - OPTIMIZOVANA VERZIJA
 cat > /var/etc/oscam/oscam.conf << 'EOF'
-# OSCam Configuration - RADNA VERZIJA
+# OSCam Configuration - OPTIMIZOVANA ZA MUMUDVB + CCCAM
 [global]
 serverip = 0.0.0.0
 logfile = /var/log/oscam/oscam.log
@@ -342,104 +342,164 @@ pidfile = /var/run/oscam.pid
 disablelog = 0
 disableuserfile = 0
 usrfileflag = 0
-clienttimeout = 5000
-fallbacktimeout = 2500  
-clientmaxidle = 120
+clienttimeout = 8000
+fallbacktimeout = 3000  
+clientmaxidle = 300
 bindwait = 120
 netprio = 0
 sleep = 0
 unlockparental = 0
 nice = 99
-maxlogsize = 10
+maxlogsize = 50
 waitforcards = 1
-preferlocalcards = 1
+preferlocalcards = 2
 saveinithistory = 1
-readerrestartseconds = 5
+readerrestartseconds = 10
+lb_mode = 1
+lb_save = 500
+lb_nbest_readers = 2
+lb_auto_betatunnel = 1
 
 [monitor]
 port = 988
 aulow = 120
-monlevel = 1
+monlevel = 4
 nocrypt = 127.0.0.1,192.168.0.0-192.168.255.255
 
 [webif]
 httpport = 8888
-httpuser = 
-httppwd = 
+httpuser = admin
+httppwd = admin
 httphelplang = en
-httprefresh = 30
+httprefresh = 15
 httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255
+httphideidleclients = 1
+httpshowmeminfo = 1
+httpshowuserinfo = 1
+httpshowecminfo = 1
+httpshowloadinfo = 1
 
 [dvbapi]
 enabled = 1
 au = 1
 user = mumudvb
 boxtype = pc
-pmt_mode = 4
+pmt_mode = 6
 request_mode = 1
+delayer = 2
+ecminfo_type = 4
+read_sdt = 2
+write_sdt_prov = 1
 
-[account]
-user = mumudvb
-pwd = mumudvb
-group = 1
-au = 1
-monlevel = 0
+[cccam]
+port = 12000
+reshare = 2
+ignorereshare = 0
+stealth = 1
+nodeid = 1234567890ABCDEF
+version = 2.3.2
+mindown = 0
 EOF
 
-# oscam.user
+# oscam.user - OPTIMIZOVANA VERZIJA
 cat > /var/etc/oscam/oscam.user << 'EOF'
+# OSCam users - OPTIMIZOVANO ZA MUMUDVB
+
+# MuMuDVB local connection
 [account]
 user = mumudvb
 pwd = mumudvb
-group = 1
+group = 1,2,3
 au = 1
 monlevel = 0
 services = 
+betatunnel = 1833.FFFF:1702,1833.FFFF:1722,1834.FFFF:1702
+cccmaxhops = 3
+cccreshare = 2
+uniq = 3
+sleep = 0
+suppresscmd08 = 1
+keepalive = 1
+
+# Web interface admin
+[account]
+user = admin
+pwd = admin
+group = 1,2,3
+au = 1
+monlevel = 4
+services = 
 betatunnel = 1833.FFFF:1702,1833.FFFF:1722
-cccmaxhops = 2
+cccmaxhops = 3
+keepalive = 1
+
+# CCcam sharing user (za vanjske klijente)
+[account]
+user = sharing
+pwd = sharing123
+group = 2
+au = 0
+monlevel = 0
+cccmaxhops = 1
+cccreshare = 0
+suppresscmd08 = 1
+services = !0B00
 EOF
 
-# oscam.server
+# oscam.server - OPTIMIZOVANA VERZIJA
 cat > /var/etc/oscam/oscam.server << 'EOF'
-# OSCam server configuration
-# Add your card readers here
+# OSCam server configuration - OPTIMIZOVANO ZA CCCAM SHARING
 
-# CCcam reader - dhoom.org server
+# CCcam reader - dhoom.org server - GLAVNI
 [reader]
-label = sead1302_dhoom
+label = dhoom_primary
 protocol = cccam
 device = dhoom.org,34000
 user = sead1302
 password = sead1302
 cccversion = 2.3.2
-group = 1
+group = 1,2,3
 disablecrccws = 1
-inactivitytimeout = 1
-reconnecttimeout = 30
-lb_weight = 100
-cccmaxhops = 10
+inactivitytimeout = 30
+reconnecttimeout = 60
+lb_weight = 300
+cccmaxhops = 3
 ccckeepalive = 1
+cccwantemu = 0
+audisabled = 0
+auprovid = 000000
+services = !0B00
+nanddumpsize = 64
 
-# Example local card reader (uncomment and configure)
+# Backup CCcam reader (dodaj svoj backup server ovde)
+# [reader]
+# label = backup_server
+# protocol = cccam
+# device = backup-server.com,port
+# user = username
+# password = password
+# cccversion = 2.3.2
+# group = 2
+# lb_weight = 100
+# cccmaxhops = 2
+# ccckeepalive = 1
+
+# Local card reader template (ako imaš karticu)
 # [reader]
 # label = local-card
 # protocol = internal
 # device = /dev/sci0
+# caid = 0B00
+# detect = cd
+# mhz = 600
+# cardmhz = 600
 # group = 1
 # emmcache = 1,3,2,0
 # blockemm-unknown = 1
 # blockemm-u = 1
 # blockemm-s = 1
 # blockemm-g = 1
-
-# Example network reader (uncomment and configure)
-# [reader]
-# label = network-server
-# protocol = cccam
-# device = your-server.com,port
-# user = username
-# password = password
-# group = 1
+# lb_weight = 1000
 EOF
 
 chmod 644 /var/etc/oscam/oscam.conf
@@ -738,16 +798,137 @@ app.get('/api/cccam/status', (req, res) => {
 
 // ============= W-SCAN API =============
 
-// W-Scan Start
+// W-Scan Start (legacy)
 app.post('/api/wscan/start', (req, res) => {
     const satellite = req.body.satellite || 'HOTBIRD';
-    // Probaj oba w_scan i w-scan (fallback)
     const wscanCmd = 'which w_scan >/dev/null 2>&1 && w_scan -f s -s ' + satellite + ' -o 7 -t 3 || w-scan -f s -s ' + satellite + ' -o 7 -t 3';
     exec(wscanCmd, (error, stdout, stderr) => {
         res.json({
             success: !error,
             output: stdout || stderr || 'W-scan completed',
             satellite: satellite
+        });
+    });
+});
+
+// W-Scan Custom Command
+app.post('/api/wscan/custom', (req, res) => {
+    const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3';
+    
+    // Security check - only allow w_scan/w-scan commands
+    if (!command.startsWith('w_scan') && !command.startsWith('w-scan')) {
+        return res.json({ success: false, error: 'Only w_scan commands allowed' });
+    }
+    
+    exec(command, { timeout: 300000 }, (error, stdout, stderr) => {
+        res.json({
+            success: !error,
+            output: stdout || stderr || 'W-scan completed',
+            command: command,
+            error: error ? error.message : null
+        });
+    });
+});
+
+// W-Scan Stop
+app.post('/api/wscan/stop', (req, res) => {
+    exec('pkill -f w_scan; pkill -f w-scan', (error) => {
+        res.json({
+            success: true,
+            message: 'W-scan stop signal sent'
+        });
+    });
+});
+
+// ============= TUNERS API =============
+
+// Scan DVB Tuners
+app.get('/api/tuners/scan', (req, res) => {
+    exec('ls -la /dev/dvb* 2>/dev/null && echo "---" && lsmod | grep dvb', (error, stdout) => {
+        const tuners = [];
+        const lines = stdout.split('\n');
+        
+        lines.forEach((line, index) => {
+            if (line.includes('/dev/dvb')) {
+                const parts = line.split('/');
+                const device = parts[parts.length - 1];
+                tuners.push({
+                    device: device,
+                    type: device.includes('frontend') ? 'DVB Frontend' : 'DVB Device',
+                    status: 'Available'
+                });
+            }
+        });
+        
+        res.json({
+            success: tuners.length > 0,
+            tuners: tuners,
+            info: stdout || 'No DVB adapters found'
+        });
+    });
+});
+
+// Get Tuner Capabilities
+app.get('/api/tuners/capabilities', (req, res) => {
+    exec('find /dev/dvb* -name "frontend*" | head -4 | xargs -I {} dvb-fe-tool -f {} 2>/dev/null || echo "dvb-tools not available"', (error, stdout) => {
+        res.json({
+            success: !error,
+            capabilities: stdout || 'No tuner capabilities found'
+        });
+    });
+});
+
+// Test Specific Tuner
+app.get('/api/tuners/test/:adapter', (req, res) => {
+    const adapter = parseInt(req.params.adapter);
+    exec(`dvb-fe-tool -a ${adapter} 2>/dev/null || echo "Adapter ${adapter} not available"`, (error, stdout) => {
+        res.json({
+            success: !error,
+            message: stdout || `Adapter ${adapter} test completed`,
+            adapter: adapter
+        });
+    });
+});
+
+// Test All Tuners
+app.get('/api/tuners/test-all', (req, res) => {
+    exec('for i in 0 1 2 3; do echo "=== Adapter $i ==="; dvb-fe-tool -a $i 2>/dev/null || echo "Adapter $i not found"; done', (error, stdout) => {
+        res.json({
+            success: true,
+            message: 'Tuner test completed',
+            output: stdout
+        });
+    });
+});
+
+// ============= CHANNELS API =============
+
+// Load Channel List
+app.get('/api/channels/list', (req, res) => {
+    exec('wget -q -O - http://localhost:4242/channels.json 2>/dev/null || echo "MuMuDVB not running or no channels"', (error, stdout) => {
+        res.json({
+            success: !error && stdout.length > 10,
+            channels: stdout || 'No channels available. Start MuMuDVB first.'
+        });
+    });
+});
+
+// Export M3U Playlist
+app.get('/api/channels/export', (req, res) => {
+    exec('wget -q -O - http://localhost:4242/playlist.m3u 2>/dev/null || echo "#EXTM3U\n# No channels available"', (error, stdout) => {
+        res.json({
+            success: !error,
+            m3u: stdout || '#EXTM3U\n# No channels available'
+        });
+    });
+});
+
+// Generate Bouquet
+app.get('/api/channels/bouquet', (req, res) => {
+    exec('wget -q -O - http://localhost:4242/channels.json | python3 -m json.tool 2>/dev/null || echo "Bouquet generation requires MuMuDVB running"', (error, stdout) => {
+        res.json({
+            success: !error,
+            message: error ? 'Bouquet generation failed' : 'Bouquet data retrieved'
         });
     });
 });

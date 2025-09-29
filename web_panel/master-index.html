@@ -555,17 +555,31 @@
 
             <!-- W-Scan Tab -->
             <div id="wscan-content" class="tab-content">
-                <h2>🔍 DVB W-Scan</h2>
+                <h2>🔍 DVB W-Scan - Editabilne Komande</h2>
                 <div class="wscan-controls">
-                    <select id="satellite-select" class="satellite-select">
-                        <option value="HOTBIRD">Hotbird 13E</option>
-                        <option value="ASTRA1">Astra 19.2E</option>
-                        <option value="ASTRA2">Astra 28.2E</option>
-                        <option value="TURKSAT">Turksat 42E</option>
-                        <option value="NILESAT">Nilesat 7W</option>
-                    </select>
-                    <button class="btn btn-scan" onclick="startWScan()">🔍 Start Scan</button>
-                    <button class="btn btn-stop" onclick="stopWScan()">⏹️ Stop Scan</button>
+                    <div style="display: grid; grid-template-columns: 1fr 150px; gap: 10px; margin-bottom: 15px;">
+                        <input type="text" id="wscan-command" class="input-field" 
+                               value="w_scan -f s -s S19E2 -o 7 -t 3" 
+                               placeholder="Unesite W-Scan komandu" 
+                               style="font-family: monospace; padding: 8px;">
+                        <select id="satellite-preset" class="satellite-select" onchange="updateWScanCommand()">
+                            <option value="S19E2">Astra 19.2E</option>
+                            <option value="S13E0">Hotbird 13E</option>
+                            <option value="S28E2">Astra 28.2E</option>
+                            <option value="S42E0">Turksat 42E</option>
+                            <option value="S7W0">Nilesat 7W</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px;">
+                        <button class="btn btn-scan" onclick="startWScan()">🔍 Start Scan</button>
+                        <button class="btn btn-stop" onclick="stopWScan()">⏹️ Stop Scan</button>
+                        <button class="btn btn-config" onclick="showWScanHelp()">❓ Help</button>
+                    </div>
+                    <div class="info-box" style="margin-bottom: 15px; font-size: 0.9rem;">
+                        <strong>💡 W-Scan Parametri:</strong><br>
+                        <code>-f s</code> = DVB-S/S2 | <code>-s SATELLITE</code> = Pozicija | <code>-o 7</code> = VDR format | <code>-t 3</code> = Timeout
+                    </div>
                 </div>
                 <div class="progress-bar" id="scan-progress" style="display: none;">
                     <div class="progress-fill" id="scan-progress-fill"></div>
@@ -575,15 +589,20 @@
 
             <!-- Tuners Tab -->
             <div id="tuners-content" class="tab-content">
-                <h2>📻 DVB Tuners</h2>
+                <h2>📻 DVB Tuners Detection</h2>
                 <div class="control-buttons">
-                    <button class="btn btn-info" onclick="scanTuners()">🔍 Scan Tuners</button>
-                    <button class="btn btn-config" onclick="showTunerDetails()">📋 Details</button>
+                    <button class="btn btn-info" onclick="scanTuners()">🔍 Scan DVB Adapters</button>
+                    <button class="btn btn-config" onclick="loadTunerCapabilities()">📋 Capabilities</button>
+                    <button class="btn btn-start" onclick="testTuners()">🧪 Test Signal</button>
                 </div>
                 <div id="tuners-list" class="card-grid">
                     <!-- Tuner cards will be populated here -->
                 </div>
-                <div id="tuner-info" class="system-info">Tuner informacije će biti prikazane ovde...</div>
+                <div id="tuner-info" class="system-info">Loading DVB adapters...</div>
+                <div class="info-box" style="margin-top: 15px;">
+                    <strong>🔧 Tuner Commands:</strong><br>
+                    <code>ls /dev/dvb*</code> - Lista adaptera | <code>dvb-fe-tool -a 0</code> - Info adapter 0
+                </div>
             </div>
 
             <!-- Channels Tab -->
@@ -924,33 +943,101 @@
         }
 
         // W-Scan functions
+        function updateWScanCommand() {
+            const preset = document.getElementById('satellite-preset').value;
+            const commandInput = document.getElementById('wscan-command');
+            
+            if (preset !== 'custom') {
+                commandInput.value = `w_scan -f s -s ${preset} -o 7 -t 3`;
+            }
+        }
+        
+        function showWScanHelp() {
+            showAlert('W-Scan Parametri:\n\n-f s = DVB-S/S2\n-f t = DVB-T\n-f c = DVB-C\n-s SATELLITE = Satelit (S19E2, S13E0, etc)\n-o 7 = VDR format\n-o 1 = szap format\n-t 3 = Timeout 3 sec\n-a N = Adapter broj', 'info');
+        }
+
         async function startWScan() {
-            const satellite = document.getElementById('satellite-select').value;
+            const command = document.getElementById('wscan-command').value;
             wscanRunning = true;
             
             document.getElementById('scan-progress').style.display = 'block';
-            document.getElementById('wscan-output').textContent = 'Starting W-Scan...';
+            document.getElementById('wscan-output').textContent = 'Starting W-Scan: ' + command;
             
             try {
-                const response = await fetch('/api/wscan/start', {
+                const response = await fetch('/api/wscan/custom', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ satellite: satellite })
+                    body: JSON.stringify({ command: command })
                 });
                 
                 const result = await response.json();
-                document.getElementById('wscan-output').textContent = result.output || 'Scan completed';
+                document.getElementById('wscan-output').innerHTML = '<pre>' + (result.output || 'Scan completed') + '</pre>';
                 
                 if (result.success) {
-                    showAlert(`W-Scan completed for ${satellite}`, 'success');
+                    showAlert('W-Scan completed successfully', 'success');
                 } else {
-                    showAlert('W-Scan failed', 'error');
+                    showAlert('W-Scan failed: ' + (result.error || 'Unknown error'), 'error');
                 }
             } catch (error) {
                 showAlert('W-Scan error: ' + error.message, 'error');
             } finally {
                 wscanRunning = false;
                 document.getElementById('scan-progress').style.display = 'none';
+            }
+        }
+        
+        function stopWScan() {
+            if (wscanRunning) {
+                fetch('/api/wscan/stop', { method: 'POST' });
+                wscanRunning = false;
+                showAlert('W-Scan stopped', 'info');
+            }
+        }
+        
+        // Tuner functions
+        async function scanTuners() {
+            document.getElementById('tuner-info').textContent = 'Scanning DVB adapters...';
+            
+            try {
+                const response = await fetch('/api/tuners/scan');
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayTuners(result.tuners);
+                    document.getElementById('tuner-info').innerHTML = '<pre>' + result.info + '</pre>';
+                } else {
+                    document.getElementById('tuner-info').textContent = 'No DVB adapters found';
+                }
+            } catch (error) {
+                document.getElementById('tuner-info').textContent = 'Error scanning tuners: ' + error.message;
+            }
+        }
+        
+        function displayTuners(tuners) {
+            const container = document.getElementById('tuners-list');
+            container.innerHTML = '';
+            
+            tuners.forEach((tuner, index) => {
+                const card = document.createElement('div');
+                card.className = 'status-card';
+                card.innerHTML = `
+                    <h3>📡 Adapter ${index}</h3>
+                    <p><strong>Type:</strong> ${tuner.type || 'Unknown'}</p>
+                    <p><strong>Device:</strong> ${tuner.device}</p>
+                    <p><strong>Status:</strong> ${tuner.status || 'Available'}</p>
+                    <button class="btn btn-config" onclick="testTuner(${index})">🧪 Test</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+        
+        async function testTuner(adapter) {
+            try {
+                const response = await fetch(`/api/tuners/test/${adapter}`);
+                const result = await response.json();
+                showAlert(`Adapter ${adapter}: ${result.message}`, result.success ? 'success' : 'error');
+            } catch (error) {
+                showAlert(`Tuner test error: ${error.message}`, 'error');
             }
         }
 
@@ -961,10 +1048,81 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    document.getElementById('system-info').textContent = result.info;
+                    document.getElementById('system-info').innerHTML = '<pre>' + result.info + '</pre>';
                 }
             } catch (error) {
                 console.error('Error loading system info:', error);
+            }
+        }
+        
+        async function loadTunerCapabilities() {
+            try {
+                const response = await fetch('/api/tuners/capabilities');
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('tuner-info').innerHTML = '<pre>' + result.capabilities + '</pre>';
+                } else {
+                    document.getElementById('tuner-info').textContent = 'No tuner capabilities found';
+                }
+            } catch (error) {
+                document.getElementById('tuner-info').textContent = 'Error loading capabilities: ' + error.message;
+            }
+        }
+        
+        async function testTuners() {
+            try {
+                const response = await fetch('/api/tuners/test-all');
+                const result = await response.json();
+                showAlert(result.message, result.success ? 'success' : 'error');
+            } catch (error) {
+                showAlert('Tuner test error: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadChannelList() {
+            try {
+                const response = await fetch('/api/channels/list');
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('channel-list').innerHTML = '<pre>' + result.channels + '</pre>';
+                } else {
+                    document.getElementById('channel-list').textContent = 'No channels found. Start MuMuDVB first.';
+                }
+            } catch (error) {
+                document.getElementById('channel-list').textContent = 'Error loading channels: ' + error.message;
+            }
+        }
+        
+        async function exportChannels() {
+            try {
+                const response = await fetch('/api/channels/export');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const blob = new Blob([result.m3u], { type: 'text/plain' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'channels.m3u';
+                    a.click();
+                    showAlert('M3U playlist exported', 'success');
+                } else {
+                    showAlert('Export failed', 'error');
+                }
+            } catch (error) {
+                showAlert('Export error: ' + error.message, 'error');
+            }
+        }
+        
+        async function generateBouquet() {
+            try {
+                const response = await fetch('/api/channels/bouquet');
+                const result = await response.json();
+                showAlert(result.message, result.success ? 'success' : 'error');
+            } catch (error) {
+                showAlert('Bouquet error: ' + error.message, 'error');
             }
         }
 
