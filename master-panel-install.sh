@@ -775,7 +775,7 @@ app.post('/api/oscam/stop', (req, res) => {
     });
 });
 
-// OSCam Config Load
+// OSCam Config Load with Path Check
 app.get('/api/oscam/config/:file', (req, res) => {
     const file = req.params.file;
     const allowedFiles = ['oscam.conf', 'oscam.user', 'oscam.server'];
@@ -784,15 +784,74 @@ app.get('/api/oscam/config/:file', (req, res) => {
         return res.json({ success: false, error: 'Invalid config file' });
     }
     
-    try {
-        const config = fs.readFileSync('/usr/local/etc/oscam/' + file, 'utf8');
-        res.json({ success: true, config: config });
-    } catch (error) {
-        res.json({ success: false, error: 'Config file not found' });
+    // Try multiple possible paths for OSCam configs
+    const possiblePaths = [
+        `/usr/local/etc/oscam/${file}`,
+        `/var/etc/oscam/${file}`,
+        `/etc/oscam/${file}`,
+        `./oscam/${file}`,
+        `./${file}`
+    ];
+    
+    let config = null;
+    let foundPath = null;
+    
+    for (const path of possiblePaths) {
+        try {
+            if (fs.existsSync(path)) {
+                config = fs.readFileSync(path, 'utf8');
+                foundPath = path;
+                break;
+            }
+        } catch (e) {
+            continue;
+        }
+    }
+    
+    if (config) {
+        res.json({ 
+            success: true, 
+            config: config,
+            path: foundPath,
+            file: file
+        });
+    } else {
+        // Try to create default config if not found
+        const defaultPath = `/usr/local/etc/oscam/${file}`;
+        
+        exec(`mkdir -p /usr/local/etc/oscam`, (mkdirError) => {
+            let defaultConfig = '';
+            
+            if (file === 'oscam.conf') {
+                defaultConfig = `# OSCam Main Configuration\\n[global]\\nserverip = 0.0.0.0\\nlogfile = /var/log/oscam/oscam.log\\npidfile = /var/run/oscam.pid\\n\\n[webif]\\nhttpport = 8888\\nhttpuser = admin\\nhttppwd = admin\\n\\n[dvbapi]\\nenabled = 1\\nuser = mumudvb`;
+            } else if (file === 'oscam.user') {
+                defaultConfig = `# OSCam User Configuration\\n[account]\\nuser = mumudvb\\npwd = mumudvb\\ngroup = 1,2,3\\nau = 1`;
+            } else if (file === 'oscam.server') {
+                defaultConfig = `# OSCam Server Configuration\\n[reader]\\nlabel = dhoom_primary\\nprotocol = cccam\\ndevice = dhoom.org,34000\\nuser = sead1302\\npassword = sead1302\\ngroup = 1,2,3`;
+            }
+            
+            try {
+                fs.writeFileSync(defaultPath, defaultConfig.replace(/\\\\n/g, '\\n'));
+                res.json({ 
+                    success: true, 
+                    config: defaultConfig.replace(/\\\\n/g, '\\n'),
+                    path: defaultPath,
+                    file: file,
+                    created: true,
+                    message: 'Default config created'
+                });
+            } catch (writeError) {
+                res.json({ 
+                    success: false, 
+                    error: `Config file not found and could not create default: ${writeError.message}`,
+                    searchedPaths: possiblePaths
+                });
+            }
+        });
     }
 });
 
-// OSCam Config Save
+// OSCam Config Save with Path Correction
 app.post('/api/oscam/config/:file', (req, res) => {
     const file = req.params.file;
     const allowedFiles = ['oscam.conf', 'oscam.user', 'oscam.server'];
@@ -801,12 +860,137 @@ app.post('/api/oscam/config/:file', (req, res) => {
         return res.json({ success: false, error: 'Invalid config file' });
     }
     
+    const configPath = `/usr/local/etc/oscam/${file}`;
+    
     try {
-        fs.writeFileSync('/var/etc/oscam/' + file, req.body.config);
-        res.json({ success: true });
+        // Ensure directory exists
+        exec('mkdir -p /usr/local/etc/oscam', (mkdirError) => {
+            if (mkdirError) {
+                return res.json({ success: false, error: `Cannot create config directory: ${mkdirError.message}` });
+            }
+            
+            try {
+                fs.writeFileSync(configPath, req.body.config);
+                exec(`chmod 644 ${configPath}`, (chmodError) => {
+                    res.json({ 
+                        success: true, 
+                        path: configPath,
+                        message: `${file} saved successfully`
+                    });
+                });
+            } catch (writeError) {
+                res.json({ success: false, error: `Cannot write config: ${writeError.message}` });
+            }
+        });
     } catch (error) {
         res.json({ success: false, error: error.message });
     }
+});
+
+// OSCam Config Reset/Initialize
+app.post('/api/oscam/init', (req, res) => {
+    console.log('🔧 Initializing OSCam configurations...');
+    
+    exec('mkdir -p /usr/local/etc/oscam', (mkdirError) => {
+        if (mkdirError) {
+            return res.json({ success: false, error: `Cannot create config directory: ${mkdirError.message}` });
+        }
+        
+        const configs = {
+            'oscam.conf': \`# OSCam Configuration - AUTO GENERATED
+[global]
+serverip = 0.0.0.0
+logfile = /var/log/oscam/oscam.log
+pidfile = /var/run/oscam.pid
+disablelog = 0
+disableuserfile = 0
+clienttimeout = 8000
+fallbacktimeout = 3000
+clientmaxidle = 300
+waitforcards = 1
+lb_mode = 1
+lb_save = 500
+
+[monitor]
+port = 988
+aulow = 120
+monlevel = 4
+nocrypt = 127.0.0.1,192.168.0.0-192.168.255.255
+
+[webif]
+httpport = 8888
+httpuser = admin
+httppwd = admin
+httpallowed = 127.0.0.1,192.168.0.0-192.168.255.255
+
+[dvbapi]
+enabled = 1
+au = 1
+user = mumudvb
+boxtype = pc
+pmt_mode = 6
+
+[cccam]
+port = 12000
+reshare = 2
+version = 2.3.2
+\`,
+            'oscam.user': \`# OSCam Users - AUTO GENERATED
+[account]
+user = mumudvb
+pwd = mumudvb
+group = 1,2,3
+au = 1
+monlevel = 0
+
+[account]
+user = admin
+pwd = admin
+group = 1,2,3
+au = 1
+monlevel = 4
+\`,
+            'oscam.server': \`# OSCam Server - AUTO GENERATED
+[reader]
+label = dhoom_primary
+protocol = cccam
+device = dhoom.org,34000
+user = sead1302
+password = sead1302
+cccversion = 2.3.2
+group = 1,2,3
+disablecrccws = 1
+inactivitytimeout = 30
+reconnecttimeout = 60
+lb_weight = 300
+cccmaxhops = 3
+ccckeepalive = 1
+\`
+        };
+        
+        let createdCount = 0;
+        const results = [];
+        
+        Object.keys(configs).forEach(filename => {
+            const filepath = \`/usr/local/etc/oscam/\${filename}\`;
+            try {
+                fs.writeFileSync(filepath, configs[filename]);
+                exec(\`chmod 644 \${filepath}\`, () => {});
+                createdCount++;
+                results.push(\`✅ \${filename} created\`);
+            } catch (writeError) {
+                results.push(\`❌ \${filename} failed: \${writeError.message}\`);
+            }
+        });
+        
+        res.json({
+            success: createdCount > 0,
+            created: createdCount,
+            total: Object.keys(configs).length,
+            results: results,
+            message: \`OSCam configs initialized (\${createdCount}/\${Object.keys(configs).length})\`
+        });
+    });
 });
 
 // ============= CCCAM API =============
@@ -883,7 +1067,7 @@ let runningWScanProcess = null;
 
 // W-Scan Custom Command with Tuner Management
 app.post('/api/wscan/custom', (req, res) => {
-    const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3 -X > channels.conf';
+    const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3';
     
     // Check if W-Scan is already running
     if (runningWScanProcess) {
@@ -943,7 +1127,7 @@ app.post('/api/wscan/custom', (req, res) => {
                             channelsInfo = `\n\n📺 channels.conf generated successfully!\n📁 Location: ${process.cwd()}/channels.conf\n📊 Size: ${stats.size} bytes\n📅 Created: ${stats.mtime}`;
                             channelsGenerated = true;
                         } else {
-                            channelsInfo = '\n\n⚠️ channels.conf not found in current directory';
+                            channelsInfo Failed to load OSCam conf= '\n\n⚠️ channels.conf not found in current directory';
                         }
                     } catch (e) {
                         channelsInfo = `\n\n❌ Error checking channels.conf: ${e.message}`;
