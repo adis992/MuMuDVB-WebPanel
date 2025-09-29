@@ -278,7 +278,7 @@ cat > /etc/mumudvb/mumudvb.conf << 'EOF'
 
 # DVB parametri
 card=0
-tuner=0
+tuner=/dev/dvb/adapter%card
 freq=10832
 pol=h
 srate=22000
@@ -327,7 +327,7 @@ rewrite_sdt=1
 sort_eit=1
 EOF
 
-chmod 644 /etc/mumudvb/mumudvb.conf
+chmod 777 /etc/mumudvb/mumudvb.conf
 print_success "MuMuDVB config kreiran"
 
 # OSCAM DEFAULTNA KONFIGURACIJA
