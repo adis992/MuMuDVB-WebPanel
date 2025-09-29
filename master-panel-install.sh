@@ -1577,6 +1577,38 @@ fi
 
 print_success "✅ MASTER HTML INTERFACE - SAMO FULL VERZIJA!"
 
+# MUMUDVB SYSTEMD SERVIS - KREIRANJE ODMAH NAKON INSTALACIJE
+print_status "Kreiranje MuMuDVB systemd servisa..."
+cat > /etc/systemd/system/mumudvb.service << 'EOF'
+[Unit]
+Description=MuMuDVB Multicast Streamer
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/mumudvb -c /etc/mumudvb/mumudvb.conf -d
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=30
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Prevent rapid restart loops - KLJUČNO!
+StartLimitInterval=60
+StartLimitBurst=3
+
+# DVB device access
+SupplementaryGroups=audio video
+
+[Install]
+WantedBy=multi-user.target
+EOF
+print_success "MuMuDVB systemd servis kreiran"
+
 # SYSTEMD SERVISI
 print_status "Systemd servisi..."
 
@@ -1628,36 +1660,6 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ReadWritePaths=/usr/local/etc/oscam /var/run /var/log
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# MuMuDVB servis - GLAVNI DVB STREAMING SERVIS
-cat > /etc/systemd/system/mumudvb.service << 'EOF'
-[Unit]
-Description=MuMuDVB Multicast Streamer
-After=network.target
-Wants=network.target
-
-[Service]
-Type=simple
-User=root
-Group=root
-ExecStart=/usr/local/bin/mumudvb -c /etc/mumudvb/mumudvb.conf -d
-Restart=on-failure
-RestartSec=5
-TimeoutStartSec=30
-TimeoutStopSec=10
-StandardOutput=journal
-StandardError=journal
-
-# Prevent rapid restart loops
-StartLimitInterval=60
-StartLimitBurst=3
-
-# DVB device access
-SupplementaryGroups=audio video
 
 [Install]
 WantedBy=multi-user.target
