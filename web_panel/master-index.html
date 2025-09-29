@@ -378,6 +378,9 @@
             <div style="margin-top: 15px;">
                 <span style="font-size: 1.2rem;">💡 Podrška: DVB-S/S2/T • CAM/SCAM • CCcam • W-Scan • Multi-Tuner</span>
             </div>
+            <div id="connection-status" style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.2); border-radius: 5px;">
+                🔄 Panel se učitava...
+            </div>
         </div>
 
         <!-- Enhanced Status Bar -->
@@ -665,9 +668,31 @@
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
-            loadSystemStatus();
-            loadSystemInfo();
-            setInterval(loadSystemStatus, 5000); // Refresh every 5 seconds
+            document.getElementById('connection-status').innerHTML = '🔄 Povezivanje sa serverom...';
+            
+            // Test server connection first
+            fetch('/health')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('connection-status').innerHTML = '✅ Server povezan uspešno!';
+                    setTimeout(() => {
+                        document.getElementById('connection-status').style.display = 'none';
+                    }, 3000);
+                    
+                    // Load initial data
+                    loadSystemStatus();
+                    loadSystemInfo();
+                    setInterval(loadSystemStatus, 5000);
+                })
+                .catch(error => {
+                    document.getElementById('connection-status').innerHTML = 
+                        '❌ Server nedostupan! Proverite da li Node.js server radi na portu 8887.<br>' +
+                        'Pokretajte: <strong>cd /opt/mumudvb-webpanel && node server.js</strong>';
+                    document.getElementById('connection-status').style.background = 'rgba(255,0,0,0.2)';
+                    
+                    // Try to reconnect every 10 seconds
+                    setTimeout(() => location.reload(), 10000);
+                });
         });
 
         // Tab management
@@ -757,6 +782,10 @@
 
             } catch (error) {
                 console.error('Error loading status:', error);
+                // Set all services to unknown status if can't connect
+                updateStatusIndicator('mumudvb', null, 'Unknown');
+                updateStatusIndicator('oscam', null, 'Unknown'); 
+                updateStatusIndicator('cccam', null, 'Unknown');
             }
         }
 
@@ -764,7 +793,11 @@
             const indicator = document.getElementById(`${service}-status`);
             const pidElement = document.getElementById(`${service}-pid`);
             
-            if (running) {
+            if (running === null) {
+                // Unknown status - server connection problem
+                indicator.className = 'status-indicator status-unknown';
+                if (pidElement) pidElement.textContent = 'Server nedostupan';
+            } else if (running) {
                 indicator.className = 'status-indicator status-running';
                 if (pidElement) pidElement.textContent = pid ? `PID: ${pid}` : 'Running';
             } else {
