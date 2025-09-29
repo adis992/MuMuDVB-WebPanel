@@ -1704,25 +1704,167 @@ sleep 2
 systemctl start mumudvb-webpanel || print_warning "Web panel servis problem"
 systemctl start oscam 2>/dev/null || print_warning "OSCam servis skip"
 
-# MuMuDVB auto-start da zauzme tuner PRVI (sprečava W-Scan konflikt)
+# DVB TUNER PROVJERA I CLEAR FUNKCIJA
+clear_tuner() {
+    print_status "🔧 CLEARING DVB TUNER 0..."
+    
+    # Kill all processes using DVB
+    print_status "Killing processes using DVB tuner..."
+    pkill -9 -f mumudvb 2>/dev/null || true
+    pkill -9 -f w_scan 2>/dev/null || true
+    pkill -9 -f w-scan 2>/dev/null || true
+    
+    # Force disconnect from DVB devices
+    print_status "Force disconnect from DVB devices..."
+    fuser -k /dev/dvb/adapter0/* 2>/dev/null || true
+    
+    # Reset DVB modules
+    print_status "Resetting DVB modules..."
+    modprobe -r dvb_core 2>/dev/null || true
+    modprobe -r dvb_usb 2>/dev/null || true
+    modprobe -r dvb_usb_v2 2>/dev/null || true
+    sleep 2
+    modprobe dvb_core 2>/dev/null || true
+    modprobe dvb_usb 2>/dev/null || true
+    modprobe dvb_usb_v2 2>/dev/null || true
+    sleep 1
+    
+    # Check if cleared
+    if ls /dev/dvb/adapter0/* >/dev/null 2>&1; then
+        print_success "✅ DVB Tuner 0 cleared and reset!"
+        return 0
+    else
+        print_warning "⚠️ DVB Tuner 0 still not available"
+        return 1
+    fi
+}
+
+# ADVANCED DVB TUNER CHECK
+check_dvb_tuner() {
+    print_status "🔍 ADVANCED DVB TUNER CHECK..."
+    
+    # Check if adapter0 exists
+    if [ ! -d "/dev/dvb/adapter0" ]; then
+        print_error "❌ DVB Adapter 0 NE POSTOJI!"
+        echo "🔍 Available adapters:"
+        ls -la /dev/dvb/ 2>/dev/null || echo "   No DVB adapters found"
+        echo ""
+        echo "💡 Možda treba:"
+        echo "   - Provjeri hardware connection"
+        echo "   - modprobe dvb driver"
+        echo "   - Restart system"
+        return 1
+    fi
+    
+    # Check if frontend0 exists
+    if [ ! -c "/dev/dvb/adapter0/frontend0" ]; then
+        print_error "❌ DVB Frontend 0 NE POSTOJI!"
+        echo "🔍 Adapter 0 devices:"
+        ls -la /dev/dvb/adapter0/ 2>/dev/null || echo "   No devices in adapter0"
+        return 1
+    fi
+    
+    # Check what processes are using tuner
+    TUNER_USERS=$(lsof /dev/dvb/adapter0/* 2>/dev/null | grep -v COMMAND || true)
+    if [ -n "$TUNER_USERS" ]; then
+        print_warning "⚠️ DVB Tuner 0 ZAUZET!"
+        echo "🔍 Processes using tuner:"
+        echo "$TUNER_USERS"
+        echo ""
+        
+        # Ask for clear option
+        echo "❓ Želite li da očistim tuner? (y/n)"
+        echo "   [ENTER za automatski clear]"
+        read -t 10 -r CLEAR_CHOICE || CLEAR_CHOICE="y"
+        
+        case $CLEAR_CHOICE in
+            ""|y|Y|yes|YES)
+                clear_tuner
+                return $?
+                ;;
+            *)
+                print_warning "⚠️ Tuner ostaje zauzet - preskačem MuMuDVB start"
+                return 1
+                ;;
+        esac
+    fi
+    
+    # Test tuner access
+    print_status "Testing DVB tuner access..."
+    if timeout 5 dvb-fe-tool -a 0 >/dev/null 2>&1; then
+        print_success "✅ DVB Tuner 0 DOSTUPAN I RADI!"
+        return 0
+    else
+        print_warning "⚠️ DVB Tuner 0 ne odgovara na test"
+        echo ""
+        echo "❓ Želite li da resetujem tuner? (y/n)"
+        echo "   [ENTER za automatski reset]"
+        read -t 10 -r RESET_CHOICE || RESET_CHOICE="y"
+        
+        case $RESET_CHOICE in
+            ""|y|Y|yes|YES)
+                clear_tuner
+                return $?
+                ;;
+            *)
+                print_warning "⚠️ Nastavljam bez tuner reset-a"
+                return 1
+                ;;
+        esac
+    fi
+}
+
+# MuMuDVB auto-start SA ADVANCED TUNER CHECK
 print_status "Pokretanje MuMuDVB sa tuner prioritetom..."
 if [ -f "/etc/mumudvb/mumudvb.conf" ]; then
-    # Check if tuner is free
-    if ! pgrep -f "w_scan\|w-scan" > /dev/null; then
-        # Start MuMuDVB kao systemd servis umjesto manual process
-        systemctl start mumudvb 2>/dev/null || {
-            print_warning "⚠️ SystemD servis problem - pokušaj manual start..."
-            mumudvb -c /etc/mumudvb/mumudvb.conf -d 2>/dev/null &
-        }
-        sleep 2
-        if pgrep -f mumudvb > /dev/null; then
-            print_success "✅ MuMuDVB pokrenut - tuner zauzet (sprečava W-Scan konflikt)"
-            echo "📺 MuMuDVB HTTP: http://localhost:4242"
+    
+    # ADVANCED DVB TUNER CHECK PRVO
+    if check_dvb_tuner; then
+        print_success "✅ DVB Tuner provjera OK - nastavljam..."
+        
+        # Check if W-Scan is running
+        if ! pgrep -f "w_scan\|w-scan" > /dev/null; then
+            # Start MuMuDVB kao systemd servis
+            print_status "Starting MuMuDVB service..."
+            systemctl start mumudvb 2>/dev/null || {
+                print_warning "⚠️ SystemD servis problem - pokušaj manual start..."
+                mumudvb -c /etc/mumudvb/mumudvb.conf -d 2>/dev/null &
+            }
+            sleep 3
+            
+            # Final check
+            if pgrep -f mumudvb > /dev/null; then
+                print_success "✅ MuMuDVB USPJEŠNO POKRENUT!"
+                echo "📺 MuMuDVB HTTP: http://localhost:4242"
+                echo "🔒 Tuner zauzet (sprečava W-Scan konflikt)"
+            else
+                print_error "❌ MuMuDVB POKRETANJE NEUSPJEŠNO!"
+                echo "🔍 Check logs: journalctl -u mumudvb -n 10"
+                echo "🔍 Manual test: mumudvb -c /etc/mumudvb/mumudvb.conf -t"
+            fi
         else
-            print_warning "⚠️ MuMuDVB pokretanje problem - tuner možda nedostupan"
+            print_warning "⚠️ W-Scan već pokrenut - stopping W-Scan first..."
+            pkill -9 -f "w_scan\|w-scan" 2>/dev/null || true
+            sleep 2
+            
+            # Try MuMuDVB start after W-Scan kill
+            systemctl start mumudvb 2>/dev/null &
+            sleep 2
+            
+            if pgrep -f mumudvb > /dev/null; then
+                print_success "✅ MuMuDVB pokrenut nakon W-Scan clear"
+            else
+                print_warning "⚠️ MuMuDVB i dalje ne može da se pokrene"
+            fi
         fi
     else
-        print_warning "⚠️ Tuner već zauzet - preskačem MuMuDVB auto-start"
+        print_error "❌ DVB TUNER PROBLEM - MuMuDVB neće raditi!"
+        echo ""
+        echo "🔧 MANUAL FIX opcije:"
+        echo "   1. systemctl restart mumudvb"
+        echo "   2. ./$(basename $0) (ponovi instalaciju)"
+        echo "   3. Restart server"
+        echo ""
     fi
 else
     print_warning "⚠️ MuMuDVB config ne postoji - preskačem auto-start"
