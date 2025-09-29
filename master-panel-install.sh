@@ -1478,7 +1478,7 @@ app.get('/api/system/info', (req, res) => {
 app.post('/api/service/:service/:action', (req, res) => {
     const service = req.params.service;
     const action = req.params.action;
-    const allowedServices = ['mumudvb-webpanel', 'oscam'];
+    const allowedServices = ['mumudvb-webpanel', 'oscam', 'mumudvb'];
     const allowedActions = ['start', 'stop', 'restart', 'status'];
     
     if (!allowedServices.includes(service) || !allowedActions.includes(action)) {
