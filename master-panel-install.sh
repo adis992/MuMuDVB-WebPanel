@@ -991,10 +991,12 @@ app.get('/api/links', (req, res) => {
     });
 });
 
-const PORT = 8887;
-app.listen(PORT, () => {
-    console.log('🚀 Master MuMuDVB Panel na portu ' + PORT);
-    console.log('🌐 Pristup: http://localhost:' + PORT);
+const PORT = process.env.PORT || 8887;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 MuMuDVB Master Panel running on port ${PORT}`);
+    console.log(`🌐 Access: http://localhost:${PORT}`);
+    console.log(`📺 MuMuDVB HTTP: http://localhost:4242 (when started)`);
+    console.log(`🔐 OSCam Web: http://localhost:8888 (admin/admin)`);
 });
 EOF
 
