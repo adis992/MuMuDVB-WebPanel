@@ -577,6 +577,48 @@ EOF
 
 print_success "W-Scan config kreiran"
 
+# TVHEADEND OPTIONAL INSTALLATION
+print_status "TVHeadend optional installation..."
+echo ""
+echo "❓ Želite li instalirati TVHeadend? (y/n)"
+echo "   TVHeadend je DVB server za TV streaming i snimanje"
+echo "   [ENTER za NO - skip TVHeadend]"
+read -t 15 -r INSTALL_TVHEADEND || INSTALL_TVHEADEND="n"
+
+if [[ "$INSTALL_TVHEADEND" =~ ^[Yy]$ ]]; then
+    print_status "Installing TVHeadend..."
+    
+    # Add TVHeadend repository
+    curl -1sLf 'https://dl.cloudsmith.io/public/tvheadend/tvheadend/setup.deb.sh' | sudo -E bash || {
+        print_warning "TVHeadend repo setup failed - using default repos"
+    }
+    
+    # Install TVHeadend
+    apt update && apt install -y tvheadend || {
+        print_error "TVHeadend installation failed!"
+        print_warning "Manual install: curl -1sLf 'https://dl.cloudsmith.io/public/tvheadend/tvheadend/setup.deb.sh' | sudo -E bash && apt install tvheadend"
+    }
+    
+    # Configure TVHeadend service
+    systemctl enable tvheadend 2>/dev/null || true
+    
+    # Create default user if TVHeadend installed successfully
+    if which tvheadend >/dev/null 2>&1; then
+        print_success "✅ TVHeadend installed successfully!"
+        echo "🌐 TVHeadend WebUI: http://localhost:9981"
+        echo "👤 Default user: noname / noname (set in first-time setup)"
+        echo "📺 Configure DVB adapters via WebUI after first boot"
+        
+        # Add to web panel services
+        print_status "TVHeadend web panel integration enabled"
+    else
+        print_warning "⚠️ TVHeadend installation incomplete"
+    fi
+else
+    print_info "TVHeadend installation skipped"
+    echo "💡 To install later: curl -1sLf 'https://dl.cloudsmith.io/public/tvheadend/tvheadend/setup.deb.sh' | sudo -E bash && apt install tvheadend"
+fi
+
 # WEB PANEL - COPY IZ PROJEKTA
 print_status "Master Web Panel kreiranje..."
 mkdir -p /opt/mumudvb-webpanel
@@ -1388,6 +1430,229 @@ app.get('/api/wscan/status', (req, res) => {
 
 // ============= TUNERS API =============
 
+// Tuner Status Check
+app.get('/api/tuner/status', (req, res) => {
+    const tunerPath = '/dev/dvb/adapter0';
+    
+    // Check if tuner exists
+    exec(`ls -la ${tunerPath}/* 2>/dev/null | wc -l`, (error, stdout) => {
+        const deviceCount = parseInt(stdout.trim()) || 0;
+        const tunerExists = deviceCount > 0;
+        
+        if (!tunerExists) {
+            return res.json({
+                available: false,
+                exists: false,
+                error: 'DVB Adapter 0 not found',
+                devices: []
+            });
+        }
+        
+        // Check what processes are using tuner
+        exec(`lsof ${tunerPath}/* 2>/dev/null || echo "none"`, (lsofError, lsofOutput) => {
+            const processes = lsofOutput.trim();
+            const isInUse = processes !== 'none' && processes.length > 10;
+            
+            // Get device list
+            exec(`ls -la ${tunerPath}/`, (listError, listOutput) => {
+                const devices = listOutput.split('\n').filter(line => line.includes('frontend') || line.includes('demux') || line.includes('dvr'));
+                
+                res.json({
+                    available: !isInUse,
+                    exists: true,
+                    inUse: isInUse,
+                    processes: processes === 'none' ? 'No processes using tuner' : processes,
+                    devices: devices,
+                    deviceCount: deviceCount,
+                    path: tunerPath
+                });
+            });
+        });
+    });
+});
+
+// Force Release Tuner
+app.post('/api/tuner/release', (req, res) => {
+    const commands = [
+        'pkill -9 -f mumudvb',
+        'pkill -9 -f w_scan', 
+        'pkill -9 -f w-scan',
+        'fuser -k /dev/dvb/adapter0/* 2>/dev/null || true',
+        'modprobe -r dvb_core 2>/dev/null || true',
+        'sleep 2',
+        'modprobe dvb_core 2>/dev/null || true'
+    ];
+    
+    const executeSequential = (cmds, index = 0, results = []) => {
+        if (index >= cmds.length) {
+            return res.json({
+                success: true,
+                message: 'Tuner force released',
+                actions: results,
+                warning: 'MuMuDVB and W-Scan processes terminated'
+            });
+        }
+        
+        exec(cmds[index], (error, stdout, stderr) => {
+            results.push({
+                command: cmds[index],
+                success: !error,
+                output: stdout || stderr || 'completed'
+            });
+            executeSequential(cmds, index + 1, results);
+        });
+    };
+    
+    executeSequential(commands);
+});
+
+// ============= W-SCAN → MuMuDVB IMPORT =============
+
+// Import W-Scan Results to MuMuDVB
+app.post('/api/wscan/import-to-mumudvb', (req, res) => {
+    const fs = require('fs');
+    const channelsFile = './channels.conf';
+    const mumuConfigFile = '/etc/mumudvb/mumudvb.conf';
+    const backupFile = '/etc/mumudvb/mumudvb.conf.backup';
+    
+    // Check if channels.conf exists
+    if (!fs.existsSync(channelsFile)) {
+        return res.json({
+            success: false,
+            error: 'channels.conf not found. Run W-Scan first.',
+            tip: 'Use W-Scan to generate channels.conf before importing'
+        });
+    }
+    
+    try {
+        // Read W-Scan results
+        const channelsData = fs.readFileSync(channelsFile, 'utf8');
+        const channels = channelsData.split('\\n').filter(line => line.trim() && !line.startsWith('#'));
+        
+        if (channels.length === 0) {
+            return res.json({
+                success: false, 
+                error: 'No channels found in channels.conf',
+                tip: 'Make sure W-Scan completed successfully'
+            });
+        }
+        
+        // Backup current MuMuDVB config
+        if (fs.existsSync(mumuConfigFile)) {
+            fs.copyFileSync(mumuConfigFile, backupFile);
+        }
+        
+        // Read current MuMuDVB config
+        let currentConfig = '';
+        if (fs.existsSync(mumuConfigFile)) {
+            currentConfig = fs.readFileSync(mumuConfigFile, 'utf8');
+            // Remove any existing imported channels
+            currentConfig = currentConfig.replace(/# AUTO-IMPORTED FROM W-SCAN[\\s\\S]*?# END W-SCAN IMPORT/g, '');
+        }
+        
+        // Parse W-Scan channels and convert to MuMuDVB format  
+        let importedChannels = '\\n# AUTO-IMPORTED FROM W-SCAN\\n';
+        let successCount = 0;
+        let basePort = 4300;
+        let baseMcastPort = 1300;
+        
+        channels.forEach((channel, index) => {
+            // W-Scan format: NAME:freq:pol:sr:vpid:apid:tpid:ca:sid:nid:tid:rid
+            const parts = channel.split(':');
+            if (parts.length >= 12) {
+                const name = parts[0].replace(/[^a-zA-Z0-9_-]/g, '_');
+                const serviceId = parts[8];
+                const pmtPid = parts[6] !== '0' ? parts[6] : '256';
+                
+                if (serviceId && serviceId !== '0') {
+                    importedChannels += `
+new_channel
+name=${name}
+service_id=${serviceId}
+pmt_pid=${pmtPid}
+unicast_port=${basePort + index}
+ip=239.100.0.${Math.min(255, 10 + index)}
+port=${baseMcastPort + index}
+`;
+                    successCount++;
+                }
+            }
+        });
+        
+        importedChannels += '# END W-SCAN IMPORT\\n';
+        
+        // Write new config
+        const newConfig = currentConfig + importedChannels;
+        fs.writeFileSync(mumuConfigFile, newConfig);
+        
+        // Set permissions
+        exec(`chmod 777 ${mumuConfigFile}`, (chmodError) => {
+            if (chmodError) console.log('Warning: Could not set config permissions');
+            
+            res.json({
+                success: true,
+                message: `Successfully imported ${successCount} channels from W-Scan`,
+                details: {
+                    totalChannels: channels.length,
+                    importedChannels: successCount,
+                    skippedChannels: channels.length - successCount,
+                    configFile: mumuConfigFile,
+                    backupFile: backupFile,
+                    portRange: `${basePort}-${basePort + successCount}`,
+                    multicastRange: `239.100.0.10-239.100.0.${Math.min(255, 10 + successCount)}`
+                },
+                tip: 'Restart MuMuDVB to apply imported channels'
+            });
+        });
+        
+    } catch (error) {
+        res.json({
+            success: false,
+            error: `Import failed: ${error.message}`,
+            tip: 'Check file permissions and W-Scan output format'
+        });
+    }
+});
+
+// Restore MuMuDVB Config Backup
+app.post('/api/mumudvb/config/restore-backup', (req, res) => {
+    const fs = require('fs');
+    const mumuConfigFile = '/etc/mumudvb/mumudvb.conf';
+    const backupFile = '/etc/mumudvb/mumudvb.conf.backup';
+    
+    if (!fs.existsSync(backupFile)) {
+        return res.json({
+            success: false,
+            error: 'No backup file found',
+            tip: 'Backup is created automatically when importing W-Scan channels'
+        });
+    }
+    
+    try {
+        fs.copyFileSync(backupFile, mumuConfigFile);
+        
+        exec(`chmod 777 ${mumuConfigFile}`, (chmodError) => {
+            if (chmodError) console.log('Warning: Could not set config permissions');
+            
+            res.json({
+                success: true,
+                message: 'MuMuDVB config restored from backup',
+                files: {
+                    restored: mumuConfigFile,
+                    backup: backupFile
+                },
+                tip: 'Restart MuMuDVB to apply restored config'
+            });
+        });
+        
+    } catch (error) {
+        res.json({
+            success: false,
+            error: `Restore failed: ${error.message}`
+        });
+    }
+});
+
 // Tuner Status with Conflict Detection
 app.get('/api/tuners/status', (req, res) => {
     // Check processes using tuners
@@ -1571,12 +1836,114 @@ app.get('/api/logs/:service', (req, res) => {
     });
 });
 
+// ============= TVHeadend API =============
+
+// TVHeadend Service Status
+app.get('/api/tvheadend/status', (req, res) => {
+    exec('systemctl is-active tvheadend 2>/dev/null || echo "inactive"', (error, stdout) => {
+        const isActive = stdout.trim() === 'active';
+        
+        exec('pgrep -f tvheadend', (pgrepError, pgrepStdout) => {
+            res.json({
+                running: isActive,
+                systemd: isActive,
+                process: !pgrepError,
+                pid: pgrepStdout.trim() || null,
+                webui: isActive ? 'http://localhost:9981' : null,
+                status: isActive ? 'active' : 'inactive'
+            });
+        });
+    });
+});
+
+// TVHeadend Service Control
+app.post('/api/tvheadend/control', (req, res) => {
+    const action = req.body.action;
+    const allowedActions = ['start', 'stop', 'restart', 'status'];
+    
+    if (!allowedActions.includes(action)) {
+        return res.json({ success: false, error: 'Invalid action' });
+    }
+    
+    // Check tuner availability for start action
+    if (action === 'start') {
+        exec('lsof /dev/dvb/adapter0/* 2>/dev/null | grep -v COMMAND || echo "free"', (tunerCheck, tunerOutput) => {
+            const tunerInUse = tunerOutput.trim() !== 'free' && tunerOutput.length > 10;
+            
+            if (tunerInUse) {
+                return res.json({
+                    success: false,
+                    error: 'DVB Tuner is in use by other process',
+                    tuner_status: tunerOutput,
+                    tip: 'Stop MuMuDVB or W-Scan before starting TVHeadend'
+                });
+            }
+            
+            // Proceed with start
+            exec(`systemctl ${action} tvheadend`, (error, stdout, stderr) => {
+                res.json({
+                    success: !error,
+                    action: action,
+                    output: stdout || stderr || 'Command completed',
+                    error: error ? error.message : null,
+                    webui: !error ? 'http://localhost:9981' : null
+                });
+            });
+        });
+    } else {
+        // Other actions (stop, restart, status)
+        exec(`systemctl ${action} tvheadend`, (error, stdout, stderr) => {
+            res.json({
+                success: !error,
+                action: action,
+                output: stdout || stderr || 'Command completed',
+                error: error ? error.message : null,
+                webui: action === 'stop' ? null : 'http://localhost:9981'
+            });
+        });
+    }
+});
+
+// TVHeadend Configuration Info
+app.get('/api/tvheadend/config', (req, res) => {
+    const fs = require('fs');
+    const configPath = '/home/hts/.hts/tvheadend';
+    
+    // Check if TVHeadend is installed
+    exec('which tvheadend', (whichError) => {
+        if (whichError) {
+            return res.json({
+                installed: false,
+                error: 'TVHeadend not installed',
+                install_command: 'curl -1sLf https://dl.cloudsmith.io/public/tvheadend/tvheadend/setup.deb.sh | sudo -E bash && apt install tvheadend'
+            });
+        }
+        
+        // Check config directory
+        exec(`ls -la ${configPath} 2>/dev/null || echo "not_found"`, (configError, configStdout) => {
+            const configExists = configStdout.trim() !== 'not_found';
+            
+            res.json({
+                installed: true,
+                configured: configExists,
+                config_path: configPath,
+                webui: 'http://localhost:9981',
+                default_user: 'noname',
+                default_pass: 'noname',
+                config_info: configExists ? configStdout : 'Config directory not found',
+                tip: configExists ? 'TVHeadend is configured' : 'Run TVHeadend first-time setup via WebUI'
+            });
+        });
+    });
+});
+
 // Links API - za redirect na ostale servise
 app.get('/api/links', (req, res) => {
     const serverIP = req.headers.host.split(':')[0];
     res.json({
         mumudvb_http: 'http://' + serverIP + ':4242',
         oscam_web: 'http://' + serverIP + ':8888',
+        tvheadend_web: 'http://' + serverIP + ':9981',
         webpanel: 'http://' + serverIP + ':8887'
     });
 });
