@@ -342,13 +342,49 @@
             margin-top: 20px;
         }
 
+        /* Tablet styles */
+        @media (max-width: 1024px) {
+            .container { padding: 20px; }
+            .service-controls { grid-template-columns: repeat(2, 1fr); }
+            .quick-links { grid-template-columns: repeat(2, 1fr); }
+            .tabs { flex-wrap: wrap; }
+            .tab-button { 
+                flex: 1;
+                min-width: 100px;
+                margin: 2px;
+            }
+        }
+
+        /* Mobile styles */
         @media (max-width: 768px) {
             .container { padding: 15px; }
-            .header h1 { font-size: 2rem; }
-            .tabs { flex-direction: column; }
+            .header h1 { font-size: 1.8rem; }
+            .tabs { 
+                flex-direction: column;
+                overflow-x: auto;
+                flex-wrap: nowrap;
+            }
+            .tab-button {
+                margin: 2px 0;
+                padding: 12px 15px;
+                font-size: 14px;
+            }
             .service-controls { grid-template-columns: 1fr; }
             .quick-links { grid-template-columns: 1fr; }
             .wscan-controls { grid-template-columns: 1fr; }
+            .terminal-container { height: 300px; }
+            .terminal-input { font-size: 16px; } /* Prevent zoom on iOS */
+            .status-indicator { font-size: 12px; }
+            .log-container { height: 250px; }
+            .form-group textarea { font-size: 16px; } /* Prevent zoom on iOS */
+        }
+
+        /* Small mobile styles */
+        @media (max-width: 480px) {
+            .header h1 { font-size: 1.5rem; }
+            .tab-button { padding: 10px 12px; font-size: 13px; }
+            .terminal-container { height: 250px; }
+            .log-container { height: 200px; }
         }
 
         .progress-bar {
