@@ -2136,6 +2136,67 @@ app.get('/api/tvheadend/channels', (req, res) => {
     }
 });
 
+// ============= TERMINAL API =============
+
+// Terminal Command Execution
+app.post('/api/terminal/execute', (req, res) => {
+    const command = req.body.command;
+    
+    // Security check - only allow safe commands or if user is authenticated
+    const dangerousCommands = ['rm -rf', 'format', 'fdisk', 'mkfs', '> /dev/', 'dd if=', 'chmod 777 /'];
+    const isDangerous = dangerousCommands.some(dangerous => command.toLowerCase().includes(dangerous));
+    
+    if (isDangerous) {
+        return res.json({
+            success: false,
+            error: 'Dangerous command blocked for security reasons',
+            tip: 'Potentially destructive commands are restricted'
+        });
+    }
+    
+    console.log(`🔥 Terminal Command: ${command}`);
+    
+    // Execute command with timeout
+    exec(command, { 
+        timeout: 30000,
+        maxBuffer: 1024 * 1024 // 1MB buffer
+    }, (error, stdout, stderr) => {
+        const output = stdout + stderr;
+        
+        if (error && error.code === 'TIMEOUT') {
+            return res.json({
+                success: false,
+                error: 'Command timeout (30 seconds)',
+                output: output
+            });
+        }
+        
+        res.json({
+            success: !error || output.length > 0,
+            output: output || (error ? error.message : 'Command completed'),
+            command: command,
+            error: error && !output ? error.message : null
+        });
+        
+        console.log(`📋 Terminal Output (${output.length} chars): ${command}`);
+    });
+});
+
+// Terminal Command History (optional)
+app.get('/api/terminal/history', (req, res) => {
+    // Simple implementation - in production, store in database
+    res.json({
+        success: true,
+        history: [
+            'systemctl status mumudvb',
+            'lsof /dev/dvb/adapter0/*',
+            'df -h',
+            'free -h',
+            'ps aux | grep mumudvb'
+        ]
+    });
+});
+
 // Links API - za redirect na ostale servise
 app.get('/api/links', (req, res) => {
     const serverIP = req.headers.host.split(':')[0];

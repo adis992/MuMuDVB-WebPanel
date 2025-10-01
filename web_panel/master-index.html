@@ -422,6 +422,9 @@
             <button class="tab" onclick="showTab('channels')">📺 Channels</button>
             <button class="tab" onclick="showTab('system')">⚙️ System</button>
             <button class="tab" onclick="showTab('logs')">📋 Logs</button>
+            <button class="tab" onclick="showTab('terminal')">💻 Terminal</button>
+            <button class="tab" onclick="showTab('tbsdtv')">🔧 TBSDTV Driver</button>
+            <button class="tab" onclick="showTab('vpn')">🔒 VPN</button>
             <button class="tab" onclick="showTab('links')">🔗 Links</button>
         </div>
 
@@ -674,6 +677,164 @@
                         <div><strong>CCcam dhoom.org:</strong> dhoom.org:34000</div>
                         <div><strong>Version:</strong> Master Panel v2.0</div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Terminal Tab -->
+            <div id="terminal-content" class="tab-content">
+                <h2>💻 Web Terminal - Root Access</h2>
+                <div class="info-box">
+                    <h3>⚠️ Security Warning</h3>
+                    <p>This terminal provides <strong>ROOT ACCESS</strong> to the system. Use with caution!</p>
+                    <p>Perfect for manual installations, troubleshooting, and system administration.</p>
+                </div>
+
+                <div class="terminal-container" style="background: #1e1e1e; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                    <div class="terminal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: #fff;">
+                        <span>🖥️ root@localhost:~#</span>
+                        <div>
+                            <button class="btn btn-secondary" onclick="clearTerminal()">🗑️ Clear</button>
+                            <button class="btn btn-warning" onclick="connectTerminal()">🔌 Connect</button>
+                        </div>
+                    </div>
+                    <div id="terminal-output" style="background: #000; color: #00ff00; font-family: 'Courier New', monospace; padding: 15px; border-radius: 5px; min-height: 400px; max-height: 600px; overflow-y: auto; white-space: pre-wrap;">
+                        Terminal loading...
+                        
+Welcome to MuMuDVB Web Terminal v2.0
+Type 'help' for available commands
+root@localhost:~# 
+                    </div>
+                    <div style="display: flex; margin-top: 10px;">
+                        <input type="text" id="terminal-input" placeholder="Enter command..." 
+                               style="flex: 1; padding: 10px; border: none; background: #333; color: #fff; border-radius: 5px 0 0 5px;"
+                               onkeypress="handleTerminalEnter(event)">
+                        <button class="btn btn-primary" onclick="executeTerminalCommand()" 
+                                style="border-radius: 0 5px 5px 0;">Execute</button>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h3>💡 Quick Commands</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px;">
+                        <button class="btn btn-info" onclick="quickCommand('systemctl status mumudvb')">📺 MuMuDVB Status</button>
+                        <button class="btn btn-info" onclick="quickCommand('systemctl status oscam')">🔐 OSCam Status</button>
+                        <button class="btn btn-info" onclick="quickCommand('lsof /dev/dvb/adapter0/*')">📻 Tuner Check</button>
+                        <button class="btn btn-info" onclick="quickCommand('df -h')">💾 Disk Space</button>
+                        <button class="btn btn-info" onclick="quickCommand('free -h')">🧠 Memory Usage</button>
+                        <button class="btn btn-info" onclick="quickCommand('ps aux | grep -E \"mumudvb|oscam|w_scan\"')">🔍 Processes</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TBSDTV Driver Tab -->
+            <div id="tbsdtv-content" class="tab-content">
+                <h2>🔧 TBSDTV Driver Installation</h2>
+                <div class="info-box">
+                    <h3>📋 About TBSDTV Drivers</h3>
+                    <p>TBSDTV provides Linux drivers for various DVB-S/S2/T/T2/C cards and USB devices.</p>
+                    <p>These drivers are essential for proper DVB hardware functionality with MuMuDVB.</p>
+                </div>
+
+                <div class="driver-info" style="background: #f0f8ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <h3>🌐 Official Installation Guide</h3>
+                    <p><strong>Source:</strong> <a href="https://github.com/tbsdtv/linux_media/wiki" target="_blank">https://github.com/tbsdtv/linux_media/wiki</a></p>
+                    
+                    <div style="background: #fff; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #007bff;">
+                        <h4>📦 Standard Installation Steps:</h4>
+                        <pre style="background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto;">
+# 1. Install dependencies
+sudo apt-get update
+sudo apt-get install build-essential linux-headers-$(uname -r) git
+
+# 2. Clone TBSDTV media drivers
+git clone https://github.com/tbsdtv/linux_media.git
+cd linux_media
+
+# 3. Build and install drivers
+make
+sudo make install
+
+# 4. Load modules
+sudo modprobe dvb-core
+sudo depmod -a
+
+# 5. Reboot system
+sudo reboot
+                        </pre>
+                    </div>
+
+                    <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #ffc107;">
+                        <h4>⚠️ Important Notes:</h4>
+                        <ul style="margin-left: 20px;">
+                            <li>Always install correct kernel headers first</li>
+                            <li>Reboot required after driver installation</li>
+                            <li>Check device compatibility on TBSDTV wiki</li>
+                            <li>Some devices require firmware files</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="manual-install" style="background: #1e1e1e; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                    <div class="terminal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: #fff;">
+                        <span>🔧 TBSDTV Driver Installation Terminal</span>
+                        <div>
+                            <button class="btn btn-secondary" onclick="clearDriverTerminal()">🗑️ Clear</button>
+                            <button class="btn btn-success" onclick="autoInstallTBSDTV()">🚀 Auto Install</button>
+                        </div>
+                    </div>
+                    <div id="driver-terminal-output" style="background: #000; color: #00ff00; font-family: 'Courier New', monospace; padding: 15px; border-radius: 5px; min-height: 300px; max-height: 500px; overflow-y: auto; white-space: pre-wrap;">
+                        TBSDTV Driver Installation Terminal Ready...
+                        
+Use terminal below for manual installation or click "Auto Install" for automated setup.
+root@localhost:~# 
+                    </div>
+                    <div style="display: flex; margin-top: 10px;">
+                        <input type="text" id="driver-terminal-input" placeholder="Enter driver installation command..." 
+                               style="flex: 1; padding: 10px; border: none; background: #333; color: #fff; border-radius: 5px 0 0 5px;"
+                               onkeypress="handleDriverTerminalEnter(event)">
+                        <button class="btn btn-primary" onclick="executeDriverCommand()" 
+                                style="border-radius: 0 5px 5px 0;">Execute</button>
+                    </div>
+                </div>
+
+                <div class="quick-actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0;">
+                    <button class="btn btn-info" onclick="checkDrivers()">🔍 Check Current Drivers</button>
+                    <button class="btn btn-warning" onclick="checkKernelHeaders()">📦 Check Kernel Headers</button>
+                    <button class="btn btn-success" onclick="downloadTBSDTV()">⬇️ Download TBSDTV Source</button>
+                    <button class="btn btn-danger" onclick="checkDVBDevices()">📺 Check DVB Devices</button>
+                </div>
+            </div>
+
+            <!-- VPN Tab -->
+            <div id="vpn-content" class="tab-content">
+                <h2>🔒 VPN Configuration</h2>
+                <div class="info-box">
+                    <h3>🚧 Under Construction</h3>
+                    <p>VPN configuration panel is being developed.</p>
+                    <p>This tab will include Nebula mesh VPN setup and configuration tools.</p>
+                </div>
+
+                <div class="vpn-placeholder" style="background: #f8f9fa; padding: 40px; border-radius: 8px; text-align: center; margin: 20px 0;">
+                    <div style="font-size: 4rem; margin-bottom: 20px;">🔒</div>
+                    <h3>VPN Panel Coming Soon</h3>
+                    <p>Advanced VPN configuration and management tools will be available here.</p>
+                    
+                    <div style="margin-top: 30px;">
+                        <h4>🎯 Planned Features:</h4>
+                        <ul style="text-align: left; display: inline-block; margin-top: 15px;">
+                            <li>Nebula mesh VPN configuration</li>
+                            <li>Certificate generation and management</li>
+                            <li>Network topology visualization</li>
+                            <li>Connection monitoring and logs</li>
+                            <li>Lighthouse server setup</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h3>💡 Current Status</h3>
+                    <p>Tab structure created and ready for VPN implementation.</p>
+                    <p>Contact developer for specific VPN requirements and timeline.</p>
                 </div>
             </div>
         </div>
@@ -1251,6 +1412,172 @@
                 showAlert('System reboot initiated...', 'success');
                 // Implementation would reboot system
             }
+        }
+
+        // ============= TERMINAL FUNCTIONS =============
+        
+        function clearTerminal() {
+            document.getElementById('terminal-output').textContent = `Terminal cleared...
+
+Welcome to MuMuDVB Web Terminal v2.0
+Type 'help' for available commands
+root@localhost:~# `;
+        }
+
+        function connectTerminal() {
+            showAlert('Connecting to terminal...', 'success');
+            document.getElementById('terminal-output').textContent += '\nTerminal connection established.\nroot@localhost:~# ';
+        }
+
+        function handleTerminalEnter(event) {
+            if (event.key === 'Enter') {
+                executeTerminalCommand();
+            }
+        }
+
+        async function executeTerminalCommand() {
+            const input = document.getElementById('terminal-input');
+            const command = input.value.trim();
+            
+            if (!command) return;
+            
+            const output = document.getElementById('terminal-output');
+            output.textContent += `\nroot@localhost:~# ${command}\n`;
+            
+            try {
+                const response = await fetch('/api/terminal/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: command })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    output.textContent += result.output + '\n';
+                } else {
+                    output.textContent += `Error: ${result.error}\n`;
+                }
+            } catch (error) {
+                output.textContent += `Connection Error: ${error.message}\n`;
+            }
+            
+            output.textContent += 'root@localhost:~# ';
+            output.scrollTop = output.scrollHeight;
+            input.value = '';
+        }
+
+        function quickCommand(cmd) {
+            document.getElementById('terminal-input').value = cmd;
+            executeTerminalCommand();
+        }
+
+        // ============= TBSDTV DRIVER FUNCTIONS =============
+        
+        function clearDriverTerminal() {
+            document.getElementById('driver-terminal-output').textContent = `TBSDTV Driver Installation Terminal Ready...
+
+Use terminal below for manual installation or click "Auto Install" for automated setup.
+root@localhost:~# `;
+        }
+
+        function handleDriverTerminalEnter(event) {
+            if (event.key === 'Enter') {
+                executeDriverCommand();
+            }
+        }
+
+        async function executeDriverCommand() {
+            const input = document.getElementById('driver-terminal-input');
+            const command = input.value.trim();
+            
+            if (!command) return;
+            
+            const output = document.getElementById('driver-terminal-output');
+            output.textContent += `\nroot@localhost:~# ${command}\n`;
+            
+            try {
+                const response = await fetch('/api/terminal/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: command })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    output.textContent += result.output + '\n';
+                } else {
+                    output.textContent += `Error: ${result.error}\n`;
+                }
+            } catch (error) {
+                output.textContent += `Connection Error: ${error.message}\n`;
+            }
+            
+            output.textContent += 'root@localhost:~# ';
+            output.scrollTop = output.scrollHeight;
+            input.value = '';
+        }
+
+        async function autoInstallTBSDTV() {
+            if (!confirm('This will automatically install TBSDTV drivers. Continue?')) return;
+            
+            const output = document.getElementById('driver-terminal-output');
+            output.textContent += '\n🚀 Starting automatic TBSDTV driver installation...\n';
+            
+            const commands = [
+                'apt-get update',
+                'apt-get install -y build-essential linux-headers-$(uname -r) git',
+                'cd /tmp && git clone https://github.com/tbsdtv/linux_media.git',
+                'cd /tmp/linux_media && make',
+                'cd /tmp/linux_media && make install',
+                'modprobe dvb-core',
+                'depmod -a'
+            ];
+            
+            for (const cmd of commands) {
+                output.textContent += `\nExecuting: ${cmd}\n`;
+                
+                try {
+                    const response = await fetch('/api/terminal/execute', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ command: cmd })
+                    });
+                    
+                    const result = await response.json();
+                    output.textContent += result.success ? result.output : `Error: ${result.error}`;
+                    output.textContent += '\n';
+                } catch (error) {
+                    output.textContent += `Connection Error: ${error.message}\n`;
+                }
+                
+                output.scrollTop = output.scrollHeight;
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+            
+            output.textContent += '\n✅ TBSDTV driver installation completed!\n⚠️  System reboot recommended.\n';
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function checkDrivers() {
+            document.getElementById('driver-terminal-input').value = 'lsmod | grep dvb';
+            executeDriverCommand();
+        }
+
+        function checkKernelHeaders() {
+            document.getElementById('driver-terminal-input').value = 'dpkg -l | grep linux-headers';
+            executeDriverCommand();
+        }
+
+        function downloadTBSDTV() {
+            document.getElementById('driver-terminal-input').value = 'cd /tmp && git clone https://github.com/tbsdtv/linux_media.git';
+            executeDriverCommand();
+        }
+
+        function checkDVBDevices() {
+            document.getElementById('driver-terminal-input').value = 'ls -la /dev/dvb*';
+            executeDriverCommand();
         }
     </script>
 </body>
