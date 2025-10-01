@@ -1257,7 +1257,7 @@ let runningWScanProcess = null;
 
 // W-Scan Custom Command with Tuner Management
 app.post('/api/wscan/custom', (req, res) => {
-    const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3 -X > channels.conf';
+    const command = req.body.command || 'w_scan -f s -s S19E2 -o 7 -t 3 -X > /opt/mumudvb-webpanel/channels.conf';
     
     // Check if W-Scan is already running
     if (runningWScanProcess) {
@@ -1286,8 +1286,11 @@ app.post('/api/wscan/custom', (req, res) => {
             console.log(`⚠️  MuMuDVB stop warning: ${stopError.message}`);
         }
         
-        // Step 2: Start W-Scan process
-        runningWScanProcess = exec(command, { timeout: 300000 }, (error, stdout, stderr) => {
+        // Step 2: Start W-Scan process (set working directory)
+        runningWScanProcess = exec(command, { 
+            timeout: 300000, 
+            cwd: '/opt/mumudvb-webpanel' 
+        }, (error, stdout, stderr) => {
             const output = stdout + stderr;
             const duration = Math.round((Date.now() - startTime) / 1000);
             
@@ -1312,12 +1315,12 @@ app.post('/api/wscan/custom', (req, res) => {
                     let channelsGenerated = false;
                     
                     try {
-                        if (fs.existsSync('./channels.conf')) {
-                            const stats = fs.statSync('./channels.conf');
-                            channelsInfo = `\n\n📺 channels.conf generated successfully!\n📁 Location: ${process.cwd()}/channels.conf\n📊 Size: ${stats.size} bytes\n📅 Created: ${stats.mtime}`;
+                        if (fs.existsSync('/opt/mumudvb-webpanel/channels.conf')) {
+                            const stats = fs.statSync('/opt/mumudvb-webpanel/channels.conf');
+                            channelsInfo = `\n\n📺 channels.conf generated successfully!\n📁 Location: /opt/mumudvb-webpanel/channels.conf\n📊 Size: ${stats.size} bytes\n📅 Created: ${stats.mtime}`;
                             channelsGenerated = true;
                         } else {
-                            channelsInfo = '\n\n⚠️ channels.conf not found in current directory';
+                            channelsInfo = '\n\n⚠️ channels.conf not found in /opt/mumudvb-webpanel directory';
                         }
                     } catch (e) {
                         channelsInfo = '\n\n❌ Error checking channels.conf: ' + e.message;
@@ -1511,7 +1514,7 @@ app.post('/api/tuner/release', (req, res) => {
 // Import W-Scan Results to MuMuDVB
 app.post('/api/wscan/import-to-mumudvb', (req, res) => {
     const fs = require('fs');
-    const channelsFile = './channels.conf';
+    const channelsFile = '/opt/mumudvb-webpanel/channels.conf';
     const mumuConfigFile = '/etc/mumudvb/mumudvb.conf';
     const backupFile = '/etc/mumudvb/mumudvb.conf.backup';
     
@@ -1935,6 +1938,202 @@ app.get('/api/tvheadend/config', (req, res) => {
             });
         });
     });
+});
+
+// ============= W-SCAN → TVHeadend IMPORT =============
+
+// Import W-Scan Results to TVHeadend
+app.post('/api/wscan/import-to-tvheadend', (req, res) => {
+    const fs = require('fs');
+    const channelsFile = '/opt/mumudvb-webpanel/channels.conf';
+    const tvhConfigPath = '/home/hts/.hts/tvheadend';
+    const muxesPath = `${tvhConfigPath}/input/dvb/networks`;
+    
+    // Check if channels.conf exists
+    if (!fs.existsSync(channelsFile)) {
+        return res.json({
+            success: false,
+            error: 'channels.conf not found. Run W-Scan first.',
+            tip: 'Use W-Scan to generate channels.conf before importing'
+        });
+    }
+    
+    // Check if TVHeadend is installed and configured
+    exec('which tvheadend', (whichError) => {
+        if (whichError) {
+            return res.json({
+                success: false,
+                error: 'TVHeadend not installed',
+                install_tip: 'Install TVHeadend first via web panel'
+            });
+        }
+        
+        // Check if TVHeadend config directory exists
+        if (!fs.existsSync(tvhConfigPath)) {
+            return res.json({
+                success: false,
+                error: 'TVHeadend not configured. Run TVHeadend WebUI first-time setup.',
+                webui: 'http://localhost:9981',
+                tip: 'Start TVHeadend and complete initial setup via WebUI'
+            });
+        }
+        
+        try {
+            // Read W-Scan results
+            const channelsData = fs.readFileSync(channelsFile, 'utf8');
+            const channels = channelsData.split('\\n').filter(line => line.trim() && !line.startsWith('#'));
+            
+            if (channels.length === 0) {
+                return res.json({
+                    success: false,
+                    error: 'No channels found in channels.conf'
+                });
+            }
+            
+            // Create networks directory if not exists
+            exec(`mkdir -p ${muxesPath}`, (mkdirError) => {
+                if (mkdirError) {
+                    return res.json({
+                        success: false,
+                        error: `Cannot create TVHeadend networks directory: ${mkdirError.message}`
+                    });
+                }
+                
+                // Convert W-Scan format to TVHeadend channels.conf format
+                let tvhChannelsData = '';
+                let convertedCount = 0;
+                
+                channels.forEach((channel) => {
+                    // W-Scan format: NAME:freq:pol:sr:vpid:apid:tpid:ca:sid:nid:tid:rid
+                    const parts = channel.split(':');
+                    if (parts.length >= 12) {
+                        const name = parts[0];
+                        const freq = parts[1];
+                        const pol = parts[2].toUpperCase();
+                        const srate = parts[3];
+                        const vpid = parts[4];
+                        const apid = parts[5];
+                        const tpid = parts[6];
+                        const ca = parts[7];
+                        const sid = parts[8];
+                        const nid = parts[9];
+                        const tid = parts[10];
+                        const rid = parts[11];
+                        
+                        // TVHeadend channels.conf format:
+                        // NAME:freq:pol:sr:fec_hi:fec_lo:mod:sys:ro:pid1:pid2:pid3:sid:nid:tid:rid
+                        tvhChannelsData += `${name}:${freq}:${pol}:${srate}:34:34:1:0:0:${vpid}:${apid}:${tpid}:${sid}:${nid}:${tid}:${rid}\\n`;
+                        convertedCount++;
+                    }
+                });
+                
+                // Save TVHeadend channels.conf
+                const tvhChannelsFile = '/opt/mumudvb-webpanel/tvheadend_channels.conf';
+                fs.writeFileSync(tvhChannelsFile, tvhChannelsData);
+                
+                // Set proper permissions for TVHeadend user
+                exec(`chown hts:video ${tvhChannelsFile} 2>/dev/null || true`, (chownError) => {
+                    // Create import script for TVHeadend
+                    const importScript = `#!/bin/bash
+# TVHeadend Channel Import Script
+# Generated from W-Scan results
+
+echo "Importing ${convertedCount} channels to TVHeadend..."
+
+# Stop TVHeadend
+systemctl stop tvheadend 2>/dev/null || true
+sleep 2
+
+# Import channels via TVHeadend channel importer
+# Note: This requires manual import via TVHeadend WebUI
+echo "Channels converted to: ${tvhChannelsFile}"
+echo "Manual import steps:"
+echo "1. Start TVHeadend: systemctl start tvheadend"
+echo "2. Open WebUI: http://localhost:9981"  
+echo "3. Go to: Configuration > DVB Inputs > Networks"
+echo "4. Create network if not exists"
+echo "5. Go to: Configuration > Channel/EPG > Channels"
+echo "6. Import channels.conf via 'Import' button"
+echo ""
+echo "Channels file ready for import: ${tvhChannelsFile}"
+`;
+                    
+                    fs.writeFileSync('/opt/mumudvb-webpanel/tvheadend_import.sh', importScript);
+                    exec('chmod +x /opt/mumudvb-webpanel/tvheadend_import.sh', () => {
+                        res.json({
+                            success: true,
+                            message: `Successfully converted ${convertedCount} channels for TVHeadend`,
+                            details: {
+                                totalChannels: channels.length,
+                                convertedChannels: convertedCount,
+                                tvhChannelsFile: tvhChannelsFile,
+                                importScript: '/opt/mumudvb-webpanel/tvheadend_import.sh',
+                                webui: 'http://localhost:9981'
+                            },
+                            instructions: [
+                                'Channels converted to TVHeadend format',
+                                'Manual import required via TVHeadend WebUI',
+                                'Go to Configuration > Channel/EPG > Channels',
+                                'Use Import button to load channels file',
+                                'File location: ' + tvhChannelsFile
+                            ],
+                            tip: 'Open TVHeadend WebUI to complete channel import'
+                        });
+                    });
+                });
+            });
+            
+        } catch (error) {
+            res.json({
+                success: false,
+                error: `TVHeadend import failed: ${error.message}`,
+                tip: 'Check TVHeadend installation and permissions'
+            });
+        }
+    });
+});
+
+// TVHeadend Channels List
+app.get('/api/tvheadend/channels', (req, res) => {
+    const tvhChannelsFile = '/opt/mumudvb-webpanel/tvheadend_channels.conf';
+    
+    if (!fs.existsSync(tvhChannelsFile)) {
+        return res.json({
+            success: false,
+            error: 'No TVHeadend channels file found',
+            tip: 'Import W-Scan results to TVHeadend first'
+        });
+    }
+    
+    try {
+        const channelsData = fs.readFileSync(tvhChannelsFile, 'utf8');
+        const channels = channelsData.split('\\n').filter(line => line.trim());
+        
+        const channelList = channels.map((channel, index) => {
+            const parts = channel.split(':');
+            return {
+                id: index + 1,
+                name: parts[0] || 'Unknown',
+                frequency: parts[1] || 'Unknown',
+                polarization: parts[2] || 'Unknown', 
+                symbol_rate: parts[3] || 'Unknown',
+                service_id: parts[12] || 'Unknown'
+            };
+        });
+        
+        res.json({
+            success: true,
+            channels: channelList,
+            total: channelList.length,
+            file: tvhChannelsFile
+        });
+        
+    } catch (error) {
+        res.json({
+            success: false,
+            error: `Failed to read channels: ${error.message}`
+        });
+    }
 });
 
 // Links API - za redirect na ostale servise
