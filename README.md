@@ -7,27 +7,31 @@
 ```bash
 git clone https://github.com/adis992/MuMuDVB-WebPanel.git
 cd MuMuDVB-WebPanel
-chmod +x complete-installer.sh
-sudo ./complete-installer.sh
+chmod +x master-panel-install.sh
+sudo ./master-panel-install.sh
 ```
 
 ## 🌟 Karakteristike
 
-- ✅ **MuMuDVB** - DVB streaming server sa CAM/SCAM podrškom
+- ✅ **MuMuDVB** - DVB streaming server sa CAM/SCAM podrškom  
 - ✅ **OSCam** - Softcam za dekriptovanje
-- ✅ **W-Scan** - Channel scanning utility  
-- ✅ **Web Panel** - Kompletni web interface za upravljanje
+- ✅ **CCcam** - Card sharing integracija
+- ✅ **W-Scan** - Channel scanning sa importom u MuMuDVB/TVHeadend
+- ✅ **TVHeadend** - TV server (opciono)
+- ✅ **Web Panel** - 13-tab responsive interface sa mobilnom optimizacijom
+- ✅ **Terminal** - SSH-like terminal pristup u browseru
 - ✅ **Auto-instalacija** - Jedan script instalira sve
-- ✅ **Systemd integration** za automatski restart
-- ✅ **DVB adapter detection** (0-4 adapteri)
+- ✅ **Systemd integration** sa restart kontrolom
+- ✅ **Multi-tuner management** - Tuner conflict detection
 
 ## 🌐 Pristup
 
 Posle instalacije:
 
-- **Master Panel**: `http://YOUR_IP:8887`
-- **OSCam Web**: `http://YOUR_IP:8888` (admin/admin)
-- **MuMuDVB HTTP**: `http://YOUR_IP:4242` (kada radi)
+- **Master Panel**: `http://YOUR_IP:8887` (13-tab interface)
+- **OSCam Web**: `http://YOUR_IP:8888` (admin/admin)  
+- **TVHeadend**: `http://YOUR_IP:9981` (ako je instaliran)
+- **MuMuDVB HTTP**: `http://YOUR_IP:4242` (streaming interface)
 
 ## 📡 W-Scan korišćenje
 
