@@ -49,7 +49,7 @@ print_status "Dependency instalacija..."
 apt update
 apt install -y build-essential git cmake mercurial subversion autotools-dev autoconf libtool pkg-config
 apt install -y libdvbcsa-dev libssl-dev libpcsclite-dev
-apt install -y dvb-tools libdvbv5-dev w-scan 2>/dev/null || {
+apt install -y dvb-tools libdvbv5-dev dvb-apps w-scan 2>/dev/null || {
     print_warning "w-scan apt install failed, trying alternatives..."
     add-apt-repository universe -y 2>/dev/null || true
     apt update
@@ -2605,7 +2605,6 @@ print_success "🔐 OSCam Web: http://$SERVER_IP:8888 (admin/admin)"
 echo ""
 print_success "🎯 SVE UPRAVLJANJE KROZ WEB PANEL NA 8887!"
 print_success "🔧 Editovanje konfiguracija, pokretanje servisa, sve na klik!"
-
 
 
 
